@@ -2,7 +2,10 @@
 #include <openvdb/Types.h>
 #include <openvdb/tree/LeafNode.h>
 #include <openvdb/tools/ParticlesToLevelSet.h>
+#include <openvdb/tools/VolumeToMesh.h>
+#include <openvdb/tree/LeafManager.h>
 #include <vector>
+#include <iostream>
 
 class ParticleList {
 	protected:
@@ -74,5 +77,25 @@ int main() {
 	file.write(grids);
 	file.close();
 
+	// Save mesh
+	std::vector<openvdb::Vec3s> points;
+	std::vector<openvdb::Vec4I> quads;
+	std::vector<openvdb::Vec3I> triangles;
+	
+	openvdb::tools::volumeToMesh(*ls, points, triangles, quads, 0.01, 0);
+
+	for(int i = 0; i < points.size(); i++){
+		std::cout << "v";
+		for(int j = 0; j < 3; j++)
+			std::cout << " " << points[i][j];
+		std::cout << std::endl;
+	}
+	
+	for(int i = 0; i < quads.size(); i++){
+		std::cout << "f";
+		for(int j = 0; j < 4; j++)
+			std::cout << " " << quads[i][j] + 1;
+		std::cout << std::endl;
+	}
 	return 0;
 }

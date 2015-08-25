@@ -1,4 +1,4 @@
-# LD_LIBRARY_PATH=/usr/local/OpenVDB/lib
+# export LD_LIBRARY_PATH=/usr/local/OpenVDB/lib
 
 all: 
 	g++ -pthread -O3 -DNDEBUG -I . -I .. -isystem /usr/include -isystem /usr/include/OpenEXR  -isystem /usr/include -DOPENVDB_USE_GLFW_3 -o openvdb openvdbtest.cpp -I . \
