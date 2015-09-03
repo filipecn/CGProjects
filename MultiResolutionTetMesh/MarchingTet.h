@@ -28,6 +28,14 @@ class MarchingTet {
 		float v[4];
 		for(int i = 0; i < 4; i++)
 			v[i] = f(tetVertices[i]);
+		runMarchTet(tetVertices, v);
+	}
+	
+	void marchTet(glm::vec3 tetVertices[], float v[]){
+		runMarchTet(tetVertices, v);
+	}
+
+	void runMarchTet(glm::vec3 tetVertices[], float v[]){
 		int triindex = 0;
 		if (v[0] < 0) triindex |= 1;
 		if (v[1] < 0) triindex |= 2;

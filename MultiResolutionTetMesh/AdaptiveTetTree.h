@@ -20,17 +20,24 @@ class AdaptiveTetTree {
 			glm::vec3 p, n;
 		};
 
+		struct MeshVertex {
+			bool processed;
+			double value;
+			MeshVertex(){processed = false;};
+		};
+
 		// Edges
 		using Edge = std::pair<int,int>;
 		std::map<Edge, int> cutVertices;
 		// Data
 		std::vector<glm::vec3> vertices; 			// mesh vertices
+		std::vector<MeshVertex> meshVertices; 			// mesh vertices data
 		TetPtr root[6]; 					// initial tetrahedra
 		std::queue<TetPtr > activeTetrahedra; 			// next to be processed
 		std::vector<TetPtr > leaves; 				// approximate surface
 		// Topology
 		// Given a face with sorted vertices, here is its neighbours
-		std::map<int, std::map<int, std::map<int, std::vector<TetPtr> faceToTetMap;
+		//std::map<int, std::map<int, std::map<int, std::vector<TetPtr> faceToTetMap;
 		// Aux Functions
 		void iterateLeaves(std::function<void(TetPtr)> f);
 		void iterateTetrahedra(std::function<void(TetPtr)> f);
@@ -48,6 +55,7 @@ class AdaptiveTetTree {
 		std::vector<Particle> particles;
 		std::function<bool(TetPtr)> oracle;
 		std::function<bool(TetPtr)> stopCondition;
+		void updateMeshVertex(int v);
 	protected:
 		// Bisection
 		inline int cutEdge(int a, int b);
@@ -257,4 +265,27 @@ void AdaptiveTetTree::explore(){
 			activeTetrahedra.emplace(t->children[1]);
 		}
 	}
+	meshVertices.resize(vertices.size(), MeshVertex());
+}
+
+void AdaptiveTetTree::updateMeshVertex(int v){
+	if(meshVertices[v].processed)
+		return;
+	bool first = true;
+	double minDist = 0.0, absMin = 0.0;
+	for(auto p : particles){
+		double dist = glm::dot(vertices[v] - p.p, p.n);
+		double absDist = fabs(dist);
+		if(first){
+			minDist = dist;
+			absMin = absDist;
+			first = false;
+		}
+		if(absDist < absMin){
+			minDist = dist;
+			absMin = absDist;
+		}
+	}
+	meshVertices[v].value = minDist;
+	meshVertices[v].processed = true;
 }

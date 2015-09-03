@@ -83,7 +83,6 @@ void render(){
 			}
 			glEnd();
 	});
-	return;
 	glEnable (GL_BLEND);
 	glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glColor4f(0.7,0.4,0.9,0.4);
@@ -92,6 +91,7 @@ void render(){
 		for(int j = 0; j < 3; j++)
 			glVertex3fv(&mt.triangles[i].v[j][0]);
 	glEnd();
+	return;
 	// draw particles
 	glPointSize(1.0);
 	glColor3f(1,0,0);
@@ -99,6 +99,13 @@ void render(){
 		for(int i = 0; i < tree.particles.size(); i++){
 			if(i == 4)
 				glColor3f(0,0,1);
+			glVertex3fv(&tree.particles[i].p[0]);
+		}
+	glEnd();
+	glBegin(GL_LINES);
+		glBegin(GL_POINTS);
+		for(int i = 0; i < tree.particles.size(); i++){
+				glColor3f(1,0,1);
 			glVertex3fv(&tree.particles[i].p[0]);
 		}
 	glEnd();
@@ -201,9 +208,13 @@ void keyboard(int key, int action){
 		mt.triangles.clear();
 		tree.iterateLeaves([](TetPtr tet){
 				glm::vec3 tetVertices[4];
-				for(int i = 0; i < 4; i++)
-				tetVertices[i] = tree.vertices[tet->vertices[i]];
-				mt.marchTet(tetVertices,f);
+				float v[4];
+				for(int i = 0; i < 4; i++){
+					tree.updateMeshVertex(tet->vertices[i]);
+					v[i] = tree.meshVertices[i].value;
+					tetVertices[i] = tree.vertices[tet->vertices[i]];
+				}
+				mt.marchTet(tetVertices,v);
 				});
 	}
 	if(key == GLFW_KEY_W && action == GLFW_PRESS)
@@ -227,7 +238,7 @@ int main(){
 			});
 
 	tree.stopCondition = std::function<bool(TetPtr)>([](TetPtr tet){
-			return tet->particles.size() <= 5;
+			return tet->particles.size() <= 50;
 			});
 
 	int n; std::cin >> n;
@@ -242,10 +253,10 @@ int main(){
 	timer.start();
 	tree.init();
 	timer.report();
-	tree.explore();
+	//tree.explore();
 	timer.report();
 	std::cerr << "number of tetrahedra " << tree.numberOfTetrahedra << std::endl;
-	
+
 	gd = GraphicsDisplay::create(WIDTH, HEIGHT, std::string("Simple3D"));
 	gd->registerRenderFunc(render);
 	gd->registerButtonFunc(mouseButton);
