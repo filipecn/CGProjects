@@ -1,5 +1,5 @@
 all: 
-	g++ -std=c++11 \
+	g++ -std=c++11 -g \
 	-I/home/filipecn/ClionProjects/Aergia/src \
 	-I/home/filipecn/ClionProjects/Aergia/src/GUI \
 	-I/home/filipecn/ClionProjects/Aergia/src/GUI/UI \

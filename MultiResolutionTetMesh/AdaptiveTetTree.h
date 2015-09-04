@@ -28,7 +28,9 @@ class AdaptiveTetTree {
 
 		// Edges
 		using Edge = std::pair<int,int>;
+		Edge makeEdge(int a, int b);
 		std::map<Edge, int> cutVertices;
+		std::map<Edge, std::vector<TetPtr> > edge_to_tet;
 		// Data
 		std::vector<glm::vec3> vertices; 			// mesh vertices
 		std::vector<MeshVertex> meshVertices; 			// mesh vertices data
@@ -46,6 +48,7 @@ class AdaptiveTetTree {
 		int maxLevel; 						// maxDepth Level
 		int numberOfTetrahedra;
 		// Call Functions
+		void addTetrahedron(TetPtr tet);
 		void addParticle(glm::vec3 p, glm::vec3 n);
 		void init();
 		void step();
@@ -56,15 +59,35 @@ class AdaptiveTetTree {
 		std::function<bool(TetPtr)> oracle;
 		std::function<bool(TetPtr)> stopCondition;
 		void updateMeshVertex(int v);
-	protected:
+	//protected:
 		// Bisection
 		inline int cutEdge(int a, int b);
 		void bisectTet(TetPtr tet);
+		void splitEdge(int a, int b);
 };
 
 AdaptiveTetTree::AdaptiveTetTree(){
 	oracle = nullptr;
 	numberOfTetrahedra = 0;
+}
+
+inline AdaptiveTetTree::Edge AdaptiveTetTree::makeEdge(int a, int b){
+	return Edge(std::min(a,b),std::max(a,b));
+}
+
+inline void AdaptiveTetTree::addTetrahedron(TetPtr tet){
+	int edges[] = { 0,1, 0,2, 0,3, 1,2, 1,3, 2,3 };
+	for(int e = 0; e < 6; e++){
+		Edge edge = makeEdge(tet->vertices[edges[e*2+0]], tet->vertices[edges[e*2+1]]);
+		auto it = edge_to_tet.find(edge);
+		if(it == edge_to_tet.end()){
+			edge_to_tet.insert(std::pair<Edge, std::vector<TetPtr> >(edge, 
+						std::vector<TetPtr>()));
+			it = edge_to_tet.find(edge);
+			if(it == edge_to_tet.end()) exit(1);
+		}
+		it->second.emplace_back(tet);
+	}
 }
 
 inline void AdaptiveTetTree::addParticle(glm::vec3 p, glm::vec3 n){
@@ -111,6 +134,7 @@ void AdaptiveTetTree::init(){
 		root[i]->id = numberOfTetrahedra++;
 		root[i]->setNormals(vertices);
 		activeTetrahedra.emplace(root[i]);
+		addTetrahedron(root[i]);
 	}
 	
 	// distribute points
@@ -125,7 +149,7 @@ void AdaptiveTetTree::init(){
 }
 
 inline int AdaptiveTetTree::cutEdge(int a, int b){
-	auto it = cutVertices.find(Edge(std::min(a,b),std::max(a,b)));
+	auto it = cutVertices.find(makeEdge(a,b));
 	if(it == cutVertices.end()){
 		vertices.emplace_back((vertices[a] + vertices[b])/2.0f);
 		return vertices.size()-1;
@@ -134,11 +158,14 @@ inline int AdaptiveTetTree::cutEdge(int a, int b){
 }
 
 void AdaptiveTetTree::bisectTet(TetPtr tet){
+	if(tet->children[0] || tet->children[1])
+		exit(1);
 	int v0 = tet->vertices[0];
 	int v1 = tet->vertices[1];
 	int v2 = tet->vertices[2];
 	int v3 = tet->vertices[3];
 	int q;
+	Edge badEdge(v0,v0);
 	switch(tet->level % 3){
 		case 0: {// Type A
 			q = cutEdge(v0,v3);
@@ -148,6 +175,8 @@ void AdaptiveTetTree::bisectTet(TetPtr tet){
 			tet->children[1] = TetPtr(new Tetrahedron(glm::ivec4(v3,v2,v1,q),
 						                  tet->sortedChild(0,3,1,q)));
 			tet->propagateNormals(vertices,1,q,3);
+			
+			badEdge.second = v3;
 			}break;
 		case 1: {// Type B
 			q = cutEdge(v0,v2);
@@ -157,6 +186,8 @@ void AdaptiveTetTree::bisectTet(TetPtr tet){
 			tet->children[1] = TetPtr(new Tetrahedron(glm::ivec4(v2,v1,q,v3),
 						                  tet->sortedChild(0,2,1,q)));
 			tet->propagateNormals(vertices,1,q,2);
+
+			badEdge.second = v2;
 			}break;
 		case 2: {// Type C
 			q = cutEdge(v0,v1);
@@ -166,6 +197,8 @@ void AdaptiveTetTree::bisectTet(TetPtr tet){
 			tet->children[1] = TetPtr(new Tetrahedron(glm::ivec4(v1,q,v2,v3),
 						                  tet->sortedChild(0,1,1,q)));
 			tet->propagateNormals(vertices,1,q,1);
+
+			badEdge.second = v1;
 			}break;
 		default: return;
 	}
@@ -173,10 +206,10 @@ void AdaptiveTetTree::bisectTet(TetPtr tet){
 		tet->children[i]->id = numberOfTetrahedra++;
 		tet->children[i]->root = tet->root; 
 		tet->children[i]->level = tet->level + 1;
+		addTetrahedron(tet->children[i]);
 	}
 
 	maxLevel = std::max(tet->level + 1, maxLevel);
-	//std::cerr << "parent " << tet->particles.size() << std::endl;
 	// move particles
 	auto it = tet->particles.begin();
 	while(it != tet->particles.end()){
@@ -195,13 +228,23 @@ void AdaptiveTetTree::bisectTet(TetPtr tet){
 			exit(1);
 		}
 	}
-	
-	//std::cerr << "parent " << tet->particles.size() << std::endl;
-	//std::cerr << "childs " << 
-	//	tet->children[0]->particles.size() << " " <<
-	//	tet->children[1]->particles.size() << " = " <<
-	//	tet->children[0]->particles.size() +
-	//	tet->children[1]->particles.size() << std::endl;
+
+	splitEdge(badEdge.first, badEdge.second);
+}
+
+void AdaptiveTetTree::splitEdge(int a, int b){
+	auto it = edge_to_tet.find(makeEdge(a,b));
+	if(it == edge_to_tet.end())
+		return;
+	for(auto t : it->second){
+		if(!t)
+			continue;
+		if(t->children[0] || t->children[1])
+			continue;
+		if(!t->hasEdge(a, b))
+			continue;
+		bisectTet(t);
+	}
 }
 
 void AdaptiveTetTree::iterateLeaves(std::function<void(TetPtr)> f){
@@ -239,7 +282,7 @@ void AdaptiveTetTree::step(){
 			}
 			bisectTet(t);
 			newActive.emplace(t->children[0]);
-			newActive.emplace(t->children[1]);
+			//newActive.emplace(t->children[1]);
 		}
 	}
 	activeTetrahedra = newActive;

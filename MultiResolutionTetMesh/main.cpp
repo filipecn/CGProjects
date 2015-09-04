@@ -9,6 +9,7 @@
 AdaptiveTetTree tree;
 MarchingTet mt;
 int curTetrahedron;
+TetPtr curTet;
 
 float f(glm::vec3 p){
 	return p.x*p.x + p.y*p.y - p.z*p.z - 0.8*0.8;
@@ -19,8 +20,8 @@ using aergia::graphics::helpers::Grid;
 using aergia::math::Transform;
 using aergia::graphics::scene::Camera3D;
 
-#define WIDTH 	800
-#define HEIGHT 	800
+#define WIDTH 	1200
+#define HEIGHT 	1200
 
 GraphicsDisplay* gd;
 Grid grid(1.0);
@@ -43,11 +44,16 @@ void render(){
 			glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 			// edges
 			int edges[] = { 0,1, 0,2, 0,3, 1,2, 1,3, 2,3 };
-			glColor4f(1.0,1.0,1.0,0.1);
+			glColor4f(1.0,1.0,1.0,0.2);
+			if(tet->id == curTetrahedron){
+				glColor3f(1.0,0.5,1.0);
+				curTet = tet;
+			}
 			glBegin(GL_LINES);
 			for(int e = 0; e < 6*2; e++)
 				glVertex3fv(&tree.vertices[tet->vertices[edges[e]]][0]);
 			glEnd();
+			return;
 			// draw particles
 			glPointSize(3.0);
 			glColor4f(1,1,0,0.2);
@@ -83,6 +89,7 @@ void render(){
 			}
 			glEnd();
 	});
+	return;
 	glEnable (GL_BLEND);
 	glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glColor4f(0.7,0.4,0.9,0.4);
@@ -217,6 +224,8 @@ void keyboard(int key, int action){
 				mt.marchTet(tetVertices,v);
 				});
 	}
+	if(key == GLFW_KEY_B && action == GLFW_PRESS)
+		tree.bisectTet(curTet);
 	if(key == GLFW_KEY_W && action == GLFW_PRESS)
 		curTetrahedron = std::max(0, curTetrahedron - 1);
 	if(key == GLFW_KEY_E && action == GLFW_PRESS)
@@ -225,6 +234,7 @@ void keyboard(int key, int action){
 
 int main(){
 	tree.oracle = std::function<bool(TetPtr)>([](TetPtr tet){
+			return true;
 			return tet->particles.size() > 0;
 
 			int signs[4]; int trueCount = 0;
@@ -238,6 +248,7 @@ int main(){
 			});
 
 	tree.stopCondition = std::function<bool(TetPtr)>([](TetPtr tet){
+			return false;
 			return tet->particles.size() <= 50;
 			});
 

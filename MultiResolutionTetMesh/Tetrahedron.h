@@ -27,13 +27,19 @@ class Tetrahedron {
 			for(int i = 0; i < 2; i++)
 				children[i] = nullptr;
 		}
-
+		
+		bool hasEdge(int e0, int e1);
 		// Normal propagation
 		void setNormals(const std::vector<glm::vec3>& vs);
 		int findIndex(const glm::ivec4 vs, int v);
 		glm::ivec4 sortedChild(int a, int b, int child, int q);
 		void propagateNormals(const std::vector<glm::vec3>& vs, int child, int q, int o);
 };
+
+bool Tetrahedron::hasEdge(int e0, int e1){
+	return (e0 == vertices[0] || e0 == vertices[1] || e0 == vertices[2] || e0 == vertices[3]) && 
+	       (e1 == vertices[0] || e1 == vertices[1] || e1 == vertices[2] || e1 == vertices[3]);
+}
 
 void Tetrahedron::setNormals(const std::vector<glm::vec3>& vs){
 	int faces[] = { 0,1,2, 0,3,1, 0,2,3, 1,3,2 };
