@@ -9,7 +9,8 @@
 AdaptiveTetTree tree;
 MarchingTet mt;
 int curTetrahedron;
-TetPtr curTet;
+int curEdge;
+int curVertex;
 
 float f(glm::vec3 p){
 	return p.x*p.x + p.y*p.y - p.z*p.z - 0.8*0.8;
@@ -32,126 +33,112 @@ glm::vec2 start;
 bool rotating = false;
 bool translating = false;
 glm::vec2 panStart;
+bool showGrid = true;
+bool showSurface = true;
 
 void render(){
 	glClearColor(0,0,0,0);
 	glClear(GL_COLOR_BUFFER_BIT);
 
 	camera.look();	
-	//grid.draw();
-	tree.iterateTetrahedra([](TetPtr tet){
-			glEnable (GL_BLEND);
-			glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-			// edges
-			int edges[] = { 0,1, 0,2, 0,3, 1,2, 1,3, 2,3 };
-			glColor4f(1.0,1.0,1.0,0.2);
-			if(tet->id == curTetrahedron){
+	if(showGrid){
+		tree.iterateTetrahedra([](Tetrahedron& tet){
+				glEnable (GL_BLEND);
+				glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+				// edges
+				int edges[] = { 0,1, 0,2, 0,3, 1,2, 1,3, 2,3 };
+				glColor4f(1.0,1.0,1.0,0.2);
+				//if(tet.level == tree.maxLevel)
+				//glColor4f(0.2,1.0,1.0,0.5);
+				//	if(!tet.hasChildren() && tet.hasEdge(
+				//		tree.tetrahedra[curTetrahedron].vertices[edges[curEdge*2+0]],
+				//		tree.tetrahedra[curTetrahedron].vertices[edges[curEdge*2+1]]))
+				//		glColor3f(1.0,0.5,0.4);
+				if(tet.id == curTetrahedron){
 				glColor3f(1.0,0.5,1.0);
-				curTet = tet;
-			}
-			glBegin(GL_LINES);
-			for(int e = 0; e < 6*2; e++)
-				glVertex3fv(&tree.vertices[tet->vertices[edges[e]]][0]);
-			glEnd();
-			return;
-			// draw particles
-			glPointSize(3.0);
-			glColor4f(1,1,0,0.2);
-			glBegin(GL_POINTS);
-			for(auto it : tet->particles)
-				glVertex3fv(&tree.particles[it].p[0]);
-			glEnd();
+				}
+				glBegin(GL_LINES);
+				for(int e = 0; e < 6*2; e++)
+				glVertex3fv(&tree.vertices[tet.vertices[edges[e]]][0]);
+				glEnd();
+				// draw particles
+				if(tet.id == curTetrahedron){
+					glPointSize(3.0);
+					glColor4f(1,1,0,0.2);
+				}
+				else{
+					glPointSize(2.0);
+					glColor4f(0,1,0,0.9);
+				}
+				glBegin(GL_POINTS);
+				for(auto it : tet.particles)
+					glVertex3fv(&tree.particles[it].p[0]);
+				glEnd();
 
-			return;
-			//if(tet->id != curTetrahedron) return;
-			// vertices
-			glPointSize(5.0);
-			glBegin(GL_POINTS);
-			glColor3f(1,0,0); glVertex3fv(&tree.vertices[tet->sortedVertices[0]][0]);
-			glColor3f(0,1,0); glVertex3fv(&tree.vertices[tet->sortedVertices[1]][0]);
-			glColor3f(1,0,1); glVertex3fv(&tree.vertices[tet->sortedVertices[2]][0]);
-			glColor3f(0,0,1); glVertex3fv(&tree.vertices[tet->sortedVertices[3]][0]);
-			glEnd();
-			//if(tet->level != tree.maxLevel) return;
-						// face normals
-			int faces[] = { 0,1,2, 0,3,1, 0,2,3, 1,3,2 };
-			glBegin(GL_LINES);
-			glColor3f(0,1,0.3);
-			for(int f = 0; f < 4; f++){
-				glm::vec3 midpoint = (
-				 	tree.vertices[tet->sortedVertices[faces[f*3+0]]]+
-					tree.vertices[tet->sortedVertices[faces[f*3+1]]]+
-					tree.vertices[tet->sortedVertices[faces[f*3+2]]])/3.0f;
-				glm::vec3 endpoint = midpoint + 0.15f*glm::vec3(
-					tet->planes[f].x,tet->planes[f].y,tet->planes[f].z);
-				glVertex3fv(&midpoint[0]);
-				glVertex3fv(&endpoint[0]);
-			}
-			glEnd();
-	});
-	return;
-	glEnable (GL_BLEND);
-	glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	glColor4f(0.7,0.4,0.9,0.4);
-	glBegin(GL_TRIANGLES);
-	for(int i = 0; i < mt.triangles.size(); i++)
-		for(int j = 0; j < 3; j++)
-			glVertex3fv(&mt.triangles[i].v[j][0]);
-	glEnd();
-	return;
-	// draw particles
-	glPointSize(1.0);
-	glColor3f(1,0,0);
-	glBegin(GL_POINTS);
-		for(int i = 0; i < tree.particles.size(); i++){
-			if(i == 4)
-				glColor3f(0,0,1);
-			glVertex3fv(&tree.particles[i].p[0]);
-		}
-	glEnd();
-	glBegin(GL_LINES);
-		glBegin(GL_POINTS);
-		for(int i = 0; i < tree.particles.size(); i++){
-				glColor3f(1,0,1);
-			glVertex3fv(&tree.particles[i].p[0]);
-		}
-	glEnd();
-/*
-	// face normals
-	int faces[][12] = {
-		{ 0,2,1, 0,1,3, 0,3,2, 1,2,3 }, // even root
-		{ 0,1,2, 0,3,1, 0,2,3, 1,3,2 }, // odd root
-	};
-	glBegin(GL_LINES);
-	glColor3f(0,1,0.3);
-	glm::vec4 planes[4];
-	planes[0] = glm::vec4(-0, 1, 0, -0.991941);
-	planes[1] = glm::vec4(0.58526, -0.810846, 0, -0.000420749); 
-	planes[2] = glm::vec4(-0.533256, 0, -0.845954, -0.0120862); 
-	planes[3] = glm::vec4(0.533256, 0, -0.845954, -0.0127687); 
-	for(int f = 0; f < 4; f++){
-		glm::vec3 midpoint = (
-				tree.particles[faces[0][f*3+0]].p+
-				tree.particles[faces[0][f*3+1]].p+
-				tree.particles[faces[0][f*3+2]].p)/3.0f;
-		glm::vec4 plane = computePlane(
-				tree.particles[faces[0][f*3+0]].p,
-				tree.particles[faces[0][f*3+1]].p,
-				tree.particles[faces[0][f*3+2]].p);
-		glm::vec3 endpoint = midpoint + 0.15f*glm::vec3(
-				planes[f].x,planes[f].y,planes[f].z);
-		glVertex3fv(&midpoint[0]);
-		glVertex3fv(&endpoint[0]);
+				return;
+				//if(tet.id != curTetrahedron) return;
+				// vertices
+				glPointSize(5.0);
+				glBegin(GL_POINTS);
+				glColor3f(1,0,0); glVertex3fv(&tree.vertices[tet.sortedVertices[0]][0]);
+				glColor3f(0,1,0); glVertex3fv(&tree.vertices[tet.sortedVertices[1]][0]);
+				glColor3f(1,0,1); glVertex3fv(&tree.vertices[tet.sortedVertices[2]][0]);
+				glColor3f(0,0,1); glVertex3fv(&tree.vertices[tet.sortedVertices[3]][0]);
+				glEnd();
+				//if(tet.level != tree.maxLevel) return;
+				// face normals
+				int faces[] = { 0,1,2, 0,3,1, 0,2,3, 1,3,2 };
+				glBegin(GL_LINES);
+				glColor3f(0,1,0.3);
+				for(int f = 0; f < 4; f++){
+					glm::vec3 midpoint = (
+							tree.vertices[tet.sortedVertices[faces[f*3+0]]]+
+							tree.vertices[tet.sortedVertices[faces[f*3+1]]]+
+							tree.vertices[tet.sortedVertices[faces[f*3+2]]])/3.0f;
+					glm::vec3 endpoint = midpoint + 0.15f*glm::vec3(
+							tet.planes[f].x,tet.planes[f].y,tet.planes[f].z);
+					glVertex3fv(&midpoint[0]);
+					glVertex3fv(&endpoint[0]);
+				}
+				glEnd();
+		});
 	}
-	glEnd();
-*/
+
+
+	// draw surface
+	if(showSurface){
+		glEnable (GL_BLEND);
+		glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		glColor4f(0.7,0.4,0.9,0.2);
+		glBegin(GL_TRIANGLES);
+		for(int i = 0; i < mt.triangles.size(); i++)
+			for(int j = 0; j < 3; j++)
+				glVertex3fv(&mt.triangles[i].v[j][0]);
+		glEnd();
+	}
 	return;
-	glColor3f(1,1,0);
+	// draw currentEdge
+	int edges[] = { 0,1, 0,2, 0,3, 1,2, 1,3, 2,3 };
+	glColor3f(1.0,1.0,0.0);
 	glBegin(GL_LINES);
-	for(int i = 0; i < tree.particles.size(); i++){
-		glm::vec3 endpoint = tree.particles[i].p + tree.particles[i].n;
-		glVertex3fv(&tree.particles[i].p[0]);
-		glVertex3fv(&endpoint[0]);
+		glVertex3fv(&tree.vertices[
+				tree.tetrahedra[curTetrahedron].vertices[edges[curEdge*2+0]]][0]);
+		glVertex3fv(&tree.vertices[
+				tree.tetrahedra[curTetrahedron].vertices[edges[curEdge*2+1]]][0]);
+	glEnd();
+	return;
+	// draw closest particle
+	glPointSize(5.0);
+	glBegin(GL_POINTS);
+	if(tree.meshVertices.size() > curVertex && tree.meshVertices[curVertex].closestParticle >= 0){
+		if(tree.meshVertices[curVertex].value < 0.0)
+			glColor3f(1,0,0);
+		else 
+			glColor3f(0,1,0);
+		glVertex3fv(&tree.vertices[curVertex][0]);
+		int closest = tree.meshVertices[curVertex].closestParticle;
+		glColor3f(0,0,1);
+		glVertex3fv(&tree.particles[closest].p[0]);
 	}
 	glEnd();
 }
@@ -212,44 +199,58 @@ void keyboard(int key, int action){
 	if(key == GLFW_KEY_S && action == GLFW_PRESS)
 		tree.step();
 	if(key == GLFW_KEY_M && action == GLFW_PRESS){
+		tree.updateMeshVertices();
 		mt.triangles.clear();
-		tree.iterateLeaves([](TetPtr tet){
+		tree.iterateLeaves([](const Tetrahedron& tet){
 				glm::vec3 tetVertices[4];
 				float v[4];
 				for(int i = 0; i < 4; i++){
-					tree.updateMeshVertex(tet->vertices[i]);
-					v[i] = tree.meshVertices[i].value;
-					tetVertices[i] = tree.vertices[tet->vertices[i]];
+					int vi = tet.vertices[i];
+					v[i] = tree.meshVertices[vi].value;
+					if(tree.meshVertices[vi].closestParticle < 0){
+					std::cerr << "no closest particle!\n";
+						exit(1);
+					}
+					tetVertices[i] = tree.vertices[vi];
 				}
 				mt.marchTet(tetVertices,v);
 				});
+		std::cerr << mt.triangles.size() << std::endl;
 	}
 	if(key == GLFW_KEY_B && action == GLFW_PRESS)
-		tree.bisectTet(curTet);
+		tree.bisectTet(curTetrahedron);
 	if(key == GLFW_KEY_W && action == GLFW_PRESS)
-		curTetrahedron = std::max(0, curTetrahedron - 1);
+		curTetrahedron = (curTetrahedron - 1 < 0)? tree.tetrahedra.size()-1:curTetrahedron-1;
 	if(key == GLFW_KEY_E && action == GLFW_PRESS)
-		curTetrahedron = std::min(tree.numberOfTetrahedra-1, curTetrahedron + 1);
+		curTetrahedron = std::min((int)(tree.tetrahedra.size()-1), curTetrahedron + 1);
+	if(key == GLFW_KEY_R && action == GLFW_PRESS)
+		curEdge = (curEdge+1)%6;
+	if(key == GLFW_KEY_V && action == GLFW_PRESS)
+		curVertex = (curVertex+1)%tree.vertices.size();
+	if(key == GLFW_KEY_C && action == GLFW_PRESS)
+		curVertex = (curVertex - 1 < 0)? tree.vertices.size()-1 : curVertex - 1;
+	if(key == GLFW_KEY_G && action == GLFW_PRESS)
+		showGrid = !showGrid;
+	if(key == GLFW_KEY_T && action == GLFW_PRESS)
+		showSurface = !showSurface;
 }
 
 int main(){
-	tree.oracle = std::function<bool(TetPtr)>([](TetPtr tet){
-			return true;
-			return tet->particles.size() > 0;
-
-			int signs[4]; int trueCount = 0;
-			for(int i = 0; i < 4; i++){
-				signs[i] = (f(tree.vertices[tet->vertices[i]]) < 0)? 0 : 1;
-				trueCount += signs[i];
-			}
-			if(trueCount == 0 || trueCount == 4)
+	tree.oracle = std::function<bool(Tetrahedron&)>([](Tetrahedron& tet){
+			if(tet.particles.size() == 0)
 				return false;
-			return true;
+			if(tet.level >= tree.maxLevelLimit)
+				return false;
+			return !tet.highCurvatureTest(tree.particles, 0.5);
 			});
 
-	tree.stopCondition = std::function<bool(TetPtr)>([](TetPtr tet){
-			return false;
-			return tet->particles.size() <= 50;
+	tree.stopCondition = std::function<bool(Tetrahedron& tet)>([](const Tetrahedron& tet){
+			if(tet.level < tree.minLevelLimit)
+				return false;
+			if(tet.level >= tree.maxLevelLimit)
+				return true;
+			
+			return tet.particles.size() <= 50;
 			});
 
 	int n; std::cin >> n;
@@ -266,7 +267,7 @@ int main(){
 	timer.report();
 	//tree.explore();
 	timer.report();
-	std::cerr << "number of tetrahedra " << tree.numberOfTetrahedra << std::endl;
+	std::cerr << "number of tetrahedra " << tree.tetrahedra.size() << std::endl;
 
 	gd = GraphicsDisplay::create(WIDTH, HEIGHT, std::string("Simple3D"));
 	gd->registerRenderFunc(render);

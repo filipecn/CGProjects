@@ -112,7 +112,3 @@ class MarchingTet {
 		}
 	}
 };
-
-
-
-
