@@ -5,101 +5,112 @@
 #include <iostream>
 #include <glm/glm.hpp>
 
-#include "Particle.h"
-
 #pragma once
 
 class Particle {
 	public:
 	glm::vec3 p, n;
+	openvdb::Vec3R o_p, o_n;
 
 	Particle(glm::vec3 position, glm::vec3 normal){
 		p = position;
 		n = normal;
+		for(int i = 0; i < 3; i++){
+			o_p[i] = p[i];
+			o_n[i] = n[i];
+		}
 	}
 };
 
 class ParticleList {
-	protected:
-		std::vector<Particle> pList;
 	public:
+		std::vector<Particle> particles;
+		
 		typedef openvdb::Vec3R value_type;
 
-		void add(value_type pos, value_type normal){
-			PData pd;
-			pd.p = pos;
-			pd.n = normal;
-			pList.push_back(pd);
-		}
-		
 		size_t size() const {
-			return pList.size();
+			return particles.size();
 		}
 
 		void getPos(size_t n, openvdb::Vec3R& xyz) const {
-			xyz = pList[n].p;
+			xyz = particles[n].o_p;
 		}
 
 };
 
 class ParticleSet {
 	protected:
-		ParticleList pl;
+		typedef openvdb::tools::PointIndexGrid PointIndexGrid;
+
+		PointIndexGrid::Ptr pointGridPtr;
+		openvdb::CoordBBox bbox;
+
+		openvdb::math::Transform::Ptr transform;
+	
+		typedef PointIndexGrid::ConstAccessor ConstAccessor;
+		typedef openvdb::tools::PointIndexIterator<> PointIndexIterator;
 	public:
-		void add(Particle p);
+		ParticleList pl;
+		ParticleSet(){}
+
+		glm::vec3 bmin, bmax;
+		void add(glm::vec3 pos, glm::vec3 normal);
 		void init();
+		int getClosestParticle(glm::vec3 point, double radius);
 };
 
-inline void ParticleSet::add(Particle p){
-	ParticleList::value_type pos, normal;
+inline void ParticleSet::add(glm::vec3 pos, glm::vec3 normal){
+	if(!pl.particles.size()){
+		for(int i = 0; i < 3; i++)
+			bmax[i] = bmin[i] = pos[i];
+	}
+	pl.particles.emplace_back(pos,normal);
 	for(int i = 0; i < 3; i++){
-		
+		bmin[i] = std::min(bmin[i], pos[i]);
+		bmax[i] = std::max(bmax[i], pos[i]);
 	}
 }
-/*
+
 void ParticleSet::init() {
 	openvdb::initialize();
 
-	ParticleList pl;
+	const float voxelSize = 1.0f;
+	transform = openvdb::math::Transform::createLinearTransform(voxelSize);
 
-	int n;
-	std::cin >> n;
-	while(n--){
-		ParticleList::value_type pos, normal;
-		for(int i = 0; i < 3; i++) std::cin >> pos[i];
-		for(int i = 0; i < 3; i++) std::cin >> normal[i];
-		pl.add(pos,normal);
-	}
+	pointGridPtr = openvdb::tools::createPointIndexGrid<PointIndexGrid>(pl, *transform);
 
-	const float voxelSize = 0.01f;
-	const openvdb::math::Transform::Ptr transform =
-		openvdb::math::Transform::createLinearTransform(voxelSize);
-
-	typedef openvdb::tools::PointIndexGrid PointIndexGrid;
-
-	PointIndexGrid::Ptr pointGridPtr =
-		openvdb::tools::createPointIndexGrid<PointIndexGrid>(pl, *transform);
-
-	openvdb::CoordBBox bbox;
 	pointGridPtr->tree().evalActiveVoxelBoundingBox(bbox);
+}
 
-	typedef PointIndexGrid::ConstAccessor ConstAccessor;
-	typedef openvdb::tools::PointIndexIterator<> PointIndexIterator;
-
+int ParticleSet::getClosestParticle(glm::vec3 point, double radius){
 	ConstAccessor acc = pointGridPtr->getConstAccessor();
 	PointIndexIterator it(bbox, acc);
 
 	// radial search
     	openvdb::BBoxd region(bbox.min().asVec3d(), bbox.max().asVec3d());
-	openvdb::Vec3d center = ParticleList::value_type(0,0,1.0);//region.getCenter();
+	openvdb::Vec3d center = ParticleList::value_type(point.x,point.y,point.z);
+	//region.getCenter();
 	
-	double radius = 0.2;
 	it.searchAndUpdate(center, radius, acc, pl, *transform);
 
-	std::cout << it.size() << std::endl;
-	while(it.next()){
-		std::cout << (*it) << std::endl;
+	int closest = -1;
+	bool first = true;
+	double minDist;
+	while(it.test()){
+		if(first){
+			first = false;
+			closest = *it;
+			glm::vec3 r = point - pl.particles[*it].p;
+			minDist = glm::dot(r, r);
+		}
+		glm::vec3 r = point - pl.particles[*it].p;
+		double dist = glm::dot(r, r);
+		if(dist < minDist){
+			closest = *it;
+			minDist = dist;
+		}
+		it.next();
 	}
-	return 0;
+	return closest;
 }
-*/
+

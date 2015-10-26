@@ -16,7 +16,8 @@ all:
 	-I/home/filipecn/ClionProjects/Aergia/src/IO \
 	-I/home/filipecn/ClionProjects/Aergia/src/IO/Resources \
 	-I/usr/local/include/GLFW \
-	main.cpp \
+	-I/usr/include/eigen3/ \
+	testparticleset.cpp \
 	-L/usr/local/OpenVDB/lib -l:libopenvdb.so.3.0.0 \
 	-ldl -lm -lz -Wl,-rpath,/usr/lib/x86_64-linux-gnu -L/usr/lib/x86_64-linux-gnu -lHalf -Wl,-rpath,/usr/lib/x86_64-linux-gnu -L/usr/lib/x86_64-linux-gnu -ltbb -Wl,-rpath,/usr/lib/x86_64-linux-gnu -L/usr/lib/x86_64-linux-gnu -lboost_iostreams -lboost_system  -Wl,-rpath,/usr/lib/x86_64-linux-gnu -L/usr/lib/x86_64-linux-gnu -lrt -ljemalloc \
 	-L/home/filipecn/ClionProjects/Aergia/build -lAergia \

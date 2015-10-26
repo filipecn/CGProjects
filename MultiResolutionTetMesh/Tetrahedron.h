@@ -17,6 +17,7 @@ class Tetrahedron {
 		int level; 			// depth in tree
 		double curvature; 		// tet particles curvature
 		bool active; 			// to be processed
+		bool processed; 		// surface already processed
 		glm::vec4 planes[4];    	// face plane equations
 		glm::ivec4 vertices;    	// vertices indices
 		glm::ivec4 sortedVertices;    	// vertex order for faces
@@ -26,6 +27,7 @@ class Tetrahedron {
 		Tetrahedron(glm::ivec4 v, glm::ivec4 sv){
 			level = 0;
 			active = true;
+			processed = false;
 			vertices = v;
 			sortedVertices = sv;
 			for(int i = 0; i < 2; i++)
@@ -109,6 +111,44 @@ inline void Tetrahedron::propagateNormals(std::vector<Tetrahedron>& tetrahedra,
 }
 
 bool Tetrahedron::highCurvatureTest(const std::vector<Particle>& particleData, double T){
+/*	curvature = 0.0;
+	std::vector<std::vector<int> > mins(3, std::vector<int>());
+	std::vector<std::vector<int> > maxs(3, std::vector<int>());
+	for(auto it : particles){
+		for(int i = 0; i < 3; i++){
+			if(!mins[i].size())
+				mins[i].emplace_back(it);
+			else if(particleData[mins[i][0]].n[i] > particleData[it].n[i]){
+				mins[i].clear();
+				mins[i].emplace_back(it);
+			}
+			if(!maxs[i].size())
+				maxs[i].emplace_back(it);
+			else if(particleData[maxs[i][0]].n[i] < particleData[it].n[i]){
+				maxs[i].clear();
+				maxs[i].emplace_back(it);
+			}
+		}
+	}
+	std::vector<int> filteredVectors;
+	for(int i = 0; i < 3; i++){
+		for(int j = 0; j < mins[i].size(); j++)
+			filteredVectors.emplace_back(mins[i][j]);
+	}
+	for(int i = 0; i < 3; i++){
+		for(int j = 0; j < maxs[i].size(); j++)
+			filteredVectors.emplace_back(maxs[i][j]);
+	}
+	for(int i = 0; i < filteredVectors.size(); i++)
+		for(int j = filteredVectors.size()-1; j > i; j++){
+			double c = glm::dot(particleData[filteredVectors[i]].n,
+					particleData[filteredVectors[j]].n);
+			curvature = std::min(curvature,c);
+			if(curvature < T)
+				return false;
+		}
+	return true;
+*/
 	curvature = 0.0;
 	bool first = true;
 	for(auto it : particles){
