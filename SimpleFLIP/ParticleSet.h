@@ -37,7 +37,6 @@ class ParticleList {
 		void getPos(size_t n, openvdb::Vec3R& xyz) const {
 			xyz = particles[n].o_p;
 		}
-
 };
 
 class ParticleSet {
