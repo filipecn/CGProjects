@@ -8,11 +8,15 @@
 
 #pragma once
 
+class ParticleSet;
+
 class Particle {
-	public:
+	friend class ParticleSet;
+	private:
 	glm::vec3 p, n, v;
 	openvdb::Vec3R o_p, o_n;
-
+	
+	public:
 	Particle(glm::vec3 position, glm::vec3 normal, glm::vec3 velocity){
 		p = position;
 		n = normal;
@@ -22,11 +26,31 @@ class Particle {
 			o_n[i] = n[i];
 		}
 	}
+	
+	void setPos(glm::vec3 position){
+		p = position;
+		for(int i = 0; i < 3; i++){
+			o_p[i] = p[i];
+		}
+	}
+	
+	void setVelocity(glm::vec3 velocity){
+		v = velocity;
+	}
+	
+	glm::vec3 getPos() const{
+		return p;
+	}
+	
+	glm::vec3 getVelocity() const{
+		return v;
+	}
 };
 
-class ParticleList {
+class ParticleSet {
 	public:
 		std::vector<Particle> particles;
+		glm::vec3 bmin, bmax;
 		
 		typedef openvdb::Vec3R value_type;
 
@@ -37,74 +61,81 @@ class ParticleList {
 		void getPos(size_t n, openvdb::Vec3R& xyz) const {
 			xyz = particles[n].o_p;
 		}
+		
+		void add(glm::vec3 pos, glm::vec3 normal, glm::vec3 velocity){
+			if(!particles.size()){
+				for(int i = 0; i < 3; i++)
+					bmax[i] = bmin[i] = pos[i];
+			}
+			particles.emplace_back(pos,normal,velocity);
+			for(int i = 0; i < 3; i++){
+				bmin[i] = std::min(bmin[i], pos[i]);
+				bmax[i] = std::max(bmax[i], pos[i]);
+			}
+		}
 };
 
-class ParticleSet {
+class ParticleSetAccessor {
 	protected:
 		typedef openvdb::tools::PointIndexGrid PointIndexGrid;
-
-		PointIndexGrid::Ptr pointGridPtr;
-		openvdb::CoordBBox bbox;
-
-		openvdb::math::Transform::Ptr transform;
-	
 		typedef PointIndexGrid::ConstAccessor ConstAccessor;
 		typedef openvdb::tools::PointIndexIterator<> PointIndexIterator;
-	public:
-		ParticleList pl;
-		ParticleSet(){}
+		
+		PointIndexGrid::Ptr pointGridPtr;
+		openvdb::CoordBBox bbox;
+		openvdb::math::Transform::Ptr transform;
+		
+		double scale;
+		glm::vec3 offset;
 
-		glm::vec3 bmin, bmax;
-		void add(glm::vec3 pos, glm::vec3 normal, glm::vec3 velocity);
-		void init();
-		int getClosestParticle(glm::vec3 point, double radius);
-		void iterateNeighbours(glm::vec3 boxMin, glm::vec3 boxMax, std::function<void(const Particle&)> f);
-		void iterateNeighbours(glm::vec3 point, double radius, std::function<void(const Particle&)> f);
+	public:
+		ParticleSetAccessor();
+		ParticleSetAccessor(ParticleSet& ps, glm::vec3 _offset, double _scale);
+		void set(ParticleSet& ps, glm::vec3 offset, double scale = 1.0);
+		void update(ParticleSet& ps);
+		
+		int getClosestParticle(ParticleSet& ps, glm::vec3 point, double radius);
+		void iterateNeighbours(ParticleSet& ps, glm::vec3 boxMin, glm::vec3 boxMax, std::function<void(const Particle&)> f);
+		void iterateNeighbours(ParticleSet& ps, glm::vec3 point, double radius, std::function<void(const Particle&)> f);
 };
 
-inline void ParticleSet::add(glm::vec3 pos, glm::vec3 normal, glm::vec3 velocity){
-	if(!pl.particles.size()){
-		for(int i = 0; i < 3; i++)
-			bmax[i] = bmin[i] = pos[i];
-	}
-	pl.particles.emplace_back(pos,normal,velocity);
-	for(int i = 0; i < 3; i++){
-		bmin[i] = std::min(bmin[i], pos[i]);
-		bmax[i] = std::max(bmax[i], pos[i]);
-	}
+ParticleSetAccessor::ParticleSetAccessor(){
+	offset = glm::vec3(0,0,0);
+	scale = 1.0;
+	pointGridPtr = nullptr;
 }
 
-void ParticleSet::init() {
+ParticleSetAccessor::ParticleSetAccessor(ParticleSet& ps, glm::vec3 _offset, double _scale) {
+	set(ps, _offset, _scale);
+}
+
+void ParticleSetAccessor::set(ParticleSet& ps, glm::vec3 offset, double scale){
 	openvdb::initialize();
 
+	this->scale = scale;
+	this->offset = offset;
 
-// The grid spacing
-const double delta = 1.0;
-// The offset to cell-center points
-const openvdb::math::Vec3d offset(delta/2., 0,0);
+	transform = openvdb::math::Transform::createLinearTransform(scale);
+	transform->postTranslate(openvdb::math::Vec3d(offset.x,offset.y,offset.z));
 
-
-	const float voxelSize = 0.5f;
-	transform = openvdb::math::Transform::createLinearTransform(delta);
-	transform->postTranslate(offset);
-
-	pointGridPtr = openvdb::tools::createPointIndexGrid<PointIndexGrid>(pl, *transform);
-
-	std::cout << bbox << std::endl;
-	pointGridPtr->tree().evalActiveVoxelBoundingBox(bbox);
-	std::cout << bbox << std::endl;
+	pointGridPtr = openvdb::tools::createPointIndexGrid<PointIndexGrid>(ps, *transform);
+	pointGridPtr->tree().evalActiveVoxelBoundingBox(bbox);	
 }
 
-int ParticleSet::getClosestParticle(glm::vec3 point, double radius){
+void ParticleSetAccessor::update(ParticleSet& ps){
+	if(!pointGridPtr)
+		return;
+	pointGridPtr = openvdb::tools::getValidPointIndexGrid<PointIndexGrid>(ps, pointGridPtr);
+}
+
+int ParticleSetAccessor::getClosestParticle(ParticleSet& ps, glm::vec3 point, double radius){
 	ConstAccessor acc = pointGridPtr->getConstAccessor();
 	PointIndexIterator it(bbox, acc);
 
 	// radial search
-    	openvdb::BBoxd region(bbox.min().asVec3d(), bbox.max().asVec3d());
-	openvdb::Vec3d center = ParticleList::value_type(point.x,point.y,point.z);
-	//region.getCenter();
+	openvdb::Vec3d center = ParticleSet::value_type(point.x,point.y,point.z);
 	
-	it.searchAndUpdate(center, radius, acc, pl, *transform);
+	it.searchAndUpdate(center, radius, acc, ps, *transform);
 
 	int closest = -1;
 	bool first = true;
@@ -113,10 +144,10 @@ int ParticleSet::getClosestParticle(glm::vec3 point, double radius){
 		if(first){
 			first = false;
 			closest = *it;
-			glm::vec3 r = point - pl.particles[*it].p;
+			glm::vec3 r = point - ps.particles[*it].getPos();
 			minDist = glm::dot(r, r);
 		}
-		glm::vec3 r = point - pl.particles[*it].p;
+		glm::vec3 r = point - ps.particles[*it].getPos();
 		double dist = glm::dot(r, r);
 		if(dist < minDist){
 			closest = *it;
@@ -127,61 +158,63 @@ int ParticleSet::getClosestParticle(glm::vec3 point, double radius){
 	return closest;
 }
 
-void ParticleSet::iterateNeighbours(glm::vec3 boxMin, glm::vec3 boxMax, std::function<void(const Particle&)> f){
+void ParticleSetAccessor::iterateNeighbours(ParticleSet& ps, glm::vec3 boxMin, glm::vec3 boxMax, std::function<void(const Particle&)> f){
 	ConstAccessor acc = pointGridPtr->getConstAccessor();
 	
-	std::cout << boxMin.x << " , " << boxMin.y << " -> " <<
-	boxMax.x << " , " << boxMax.y << std::endl;
-	openvdb::CoordBBox cbbox = openvdb::CoordBBox(
-	openvdb::Coord(boxMin.x,boxMin.y,boxMin.z),
-	openvdb::Coord(boxMax.x,boxMax.y,boxMax.z));
+	//std::cout << boxMin.x << " , " << boxMin.y << " -> " <<
+	//boxMax.x << " , " << boxMax.y << std::endl;
+	//openvdb::CoordBBox cbbox = openvdb::CoordBBox(
+	//openvdb::Coord(boxMin.x,boxMin.y,boxMin.z),
+	//openvdb::Coord(boxMax.x,boxMax.y,boxMax.z));
 	
-	openvdb::Vec3d worldSpacePoint(boxMin.x,boxMin.y,boxMin.z);
-	std::cout << "bmin -> " <<  worldSpacePoint << std::endl;
-	openvdb::Vec3d indexSpacePoint = transform->worldToIndex(worldSpacePoint);
-	std::cout << indexSpacePoint << std::endl;
+	//openvdb::Vec3d worldSpacePoint(boxMin.x,boxMin.y,boxMin.z);
+	//std::cout << "bmin -> " <<  worldSpacePoint << std::endl;
+	//openvdb::Vec3d indexSpacePoint = transform->worldToIndex(worldSpacePoint);
+	//std::cout << indexSpacePoint << std::endl;
 	
-	std::cout << bbox << std::endl;
-	std::cout << cbbox << std::endl;
+	//std::cout << bbox << std::endl;
+	//std::cout << cbbox << std::endl;
 	
 	
 	PointIndexIterator it(bbox, acc);
 
-	glm::vec3 center = boxMin + boxMax;
-	center /= 2.0;
-	glm::vec3 size = boxMax - center;
+	//glm::vec3 center = boxMin + boxMax;
+	//center /= 2.0;
+	//glm::vec3 size = boxMax - center;
     
 	openvdb::BBoxd region(
 	transform->worldToIndex(openvdb::Vec3d(boxMin.x,boxMin.y,boxMin.z)),
 	transform->worldToIndex(openvdb::Vec3d(boxMax.x,boxMax.y,boxMax.z)));
 	
-	//openvdb::BBoxd region(bbox.min().asVec3d(), bbox.max().asVec3d());
+	//openvdb::BBoxd region(openvdb::Vec3d(boxMin.x,boxMin.y,boxMin.z), 
+	//					  openvdb::Vec3d(boxMax.x,boxMax.y,boxMax.z));
 	
-	//region.expand(1.0*0.5);
+	region.expand(scale*1.0);
 	
 	//std::cout << "eh noise\n";
 	//std::cout << region << std::endl;
 	//std::cout << bbox << std::endl;
-	it.searchAndUpdate(region, acc, pl, *transform);
+	it.searchAndUpdate(region, acc, ps, *transform);
 
 	while(it.test()){
-		f(pl.particles[*it]);
+		f(ps.particles[*it]);
 		it.next();
 	}
 }
 
-void ParticleSet::iterateNeighbours(glm::vec3 point, double radius, std::function<void(const Particle&)> f){
+void ParticleSetAccessor::iterateNeighbours(ParticleSet& ps, glm::vec3 point, double radius, std::function<void(const Particle&)> f){
 	ConstAccessor acc = pointGridPtr->getConstAccessor();
 	PointIndexIterator it(bbox, acc);
 	
 	// radial search
-	//openvdb::Vec3d center = ParticleList::value_type(point.x,point.y,point.z);
-	openvdb::Vec3d center = ParticleList::value_type(
+	openvdb::Vec3d center = ParticleSet::value_type(
 		transform->worldToIndex(openvdb::Vec3d(point.x,point.y,point.z)));
-	it.searchAndUpdate(center, radius, acc, pl, *transform);
+		
+	it.searchAndUpdate(center, radius/scale, acc, ps, *transform);
+	
 
 	while(it.test()){
-		f(pl.particles[*it]);
+		f(ps.particles[*it]);
 		it.next();
 	}
 }

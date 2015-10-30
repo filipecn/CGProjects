@@ -23,8 +23,10 @@ public:
 	float rho;
 
 	ParticleSet particleSet;
+	ParticleSetAccessor psa[3];
+	
 	MACGrid<float> grid;
-	Grid<float> uCopy, vCopy;
+	Grid<float> vCopy[2];
 	Grid<char> cell;
 	Grid<bool> isSolid;
 	Grid<glm::vec3> solidVelocity;
@@ -33,13 +35,12 @@ public:
 
 	void init();
 	void fillCell(int i, int j);
-
 	void step();
 
-	// substeps
+	// substepss
 	void advect();
 	void gather(uint gi);
-	void scather(uint gi);
+	void scatter(uint gi);
 	void classifyCells();
 	void solvePressure();
 	void addForces();
@@ -50,81 +51,98 @@ private:
 
 void FLIP::init(){
 	// MAC Grid
-	grid.set(size[0], size[1]);
+	grid.set(size[0], size[1], dx);
 	// Solid Walls
-	isSolid.set(size[0], size[1]);
+	isSolid.set(size[0], size[1], dx);
 	isSolid.setAll(false);
-	solidVelocity.set(size[0], size[1]);
+	solidVelocity.set(size[0], size[1], dx);
 	solidVelocity.setAll(glm::vec3(0,0,0));
 	// cells
-	cell.set(size[0], size[1]);
+	cell.set(size[0], size[1], dx);
 	cell.setAll(0);
+	// velocity copy
+	vCopy[0].set(size[0]+1, size[1], dx);
+	vCopy[1].set(size[0], size[1]+1, dx);
+	// ParticleSet Accessors
+	psa[GridType::U].set(particleSet, glm::vec3(0,0.5*dx,0),dx);
+	psa[GridType::V].set(particleSet, glm::vec3(0.5*dx,0,0),dx);
+	psa[GridType::P].set(particleSet, glm::vec3(0,0,0),dx);
 	
 	srand (time(NULL));
 }
 
 void FLIP::fillCell(int i, int j){
 	float subsize = dx / 2.0;
-	for(int x = 0; x < 2; x++)
+	for(int x = 0; x < 2; x++){
 		for(int y = 0; y < 2; y++){
-			particleSet.add(glm::vec3(float(i)*dx + (x-1)*subsize + 
-						((double) rand() / (RAND_MAX))*subsize,
-						float(j)*dx + (y-1)*subsize +
-						((double) rand() / (RAND_MAX))*subsize,
-						0.0),
+			/*particleSet.add(glm::vec3(float(i)*dx + (x-1)*subsize + subsize/2.0,
+									  float(j)*dx + (y-1)*subsize + subsize/2.0, 0.0 ),
+									  glm::vec3(0,0,0),
+									  glm::vec3(0,0,0));*/
+			particleSet.add(glm::vec3(float(i)*dx + (x-1)*subsize + ((double) rand() / (RAND_MAX))*subsize,
+									  float(j)*dx + (y-1)*subsize + ((double) rand() / (RAND_MAX))*subsize, 0.0),
 					glm::vec3(0,0,0),
-					glm::vec3(40,-40,0));
+					glm::vec3(0,0,0));
+					
+			/*particleSet.add(glm::vec3(float(i)*dx,
+									  float(j)*dx - dx*0.5, 0.0),
+					glm::vec3(0,0,0),
+					glm::vec3(0,10,0));*/
+					return;
 		}
+	}
 }
 
 void FLIP::step(){
+	advect();
+	for(int i = 0; i < 3; i++)
+		psa[i].update(particleSet);
 	gather(GridType::U);
 	gather(GridType::V);
-	addForces();
 	classifyCells();
+	addForces();
 	solvePressure();
-	advect();
-	particleSet.init();
+	enforceBoundary();
+	scatter(GridType::U);
+	scatter(GridType::V);
 }
 
 void FLIP::gather(uint gi){
 	GridPtr<float> g = grid.get(gi);
 	for(int i = 0; i < g->size.x; i++)
 		for(int j = 0; j < g->size.y; j++){
-			glm::vec3 gp = dx*glm::vec3(float(i),float(j),0.0) + 
-				       dx*glm::vec3(g->offset.x, g->offset.y, 0.0);
-			glm::vec3 boxMin = gp - glm::vec3(dx,dx,dx);
-			glm::vec3 boxMax = gp + glm::vec3(dx,dx,dx);
+			glm::vec2 gp = g->gridToWorld(glm::vec2(float(i),float(j)));
+			glm::vec3 boxMin = glm::vec3(gp.x,gp.y,0.0) - glm::vec3(dx,dx,dx);
+			glm::vec3 boxMax = glm::vec3(gp.x,gp.y,0.0) + glm::vec3(dx,dx,dx);
 			float sum = 0.0;
 			float wsum = 0.0;
 			int total = 0;
-			//std::cerr << "for grid " << gi << ", cell " << i << "," << j << ": bbox "
-			//	<< boxMin.x << "," << boxMin.y << "," << boxMax.x << "," << boxMax.y 
-			//	<< " ->\n";
-			particleSet.iterateNeighbours(boxMin, boxMax, [&total, &wsum, &sum, gi, gp, this](const Particle& p){
+			psa[gi].iterateNeighbours(particleSet, boxMin, boxMax, [&total, &wsum, &sum, gi, gp, this](const Particle& p){
 				double k = 1.0;
-				for(int d = 0; d < 3; d++)
-					k *= quadraticBSpline((p.p[d] - gp[d])/dx);
+				glm::vec3 pos = p.getPos();
+				glm::vec3 vel = p.getVelocity();
+				for(int d = 0; d < 2; d++)
+					k *= quadraticBSpline((pos[d] - gp[d])/dx);
 				wsum += k;
-				sum += p.v[gi]*k;
+				sum += vel[gi]*k;
 				total++;
-			//	std::cerr << "particle  " << p.v.x << " " << p.v.y << std::endl;
-			//	std::cerr << "wsum inside " << wsum << std::endl;
 			});
-			//std::cerr << sum << std::endl;
-			//std::cerr << wsum << std::endl;
-			if(total)
+			if(total && wsum != 0.0){
 				(*g)(i,j) = sum / wsum;
+			}
 			else 
 				(*g)(i,j) = 0.0;
-			
+			vCopy[gi](i,j) = (*g)(i,j);
 	}
 }
 
-void FLIP::scather(uint gi){
+void FLIP::scatter(uint gi){
 	GridPtr<float> g = grid.get(gi);
-	for(Particle& pa : particleSet.pl.particles){
-		pa.v.x = g->sample(pa.p.x,pa.p.y);
+	for(Particle& pa : particleSet.particles){
+		glm::vec3 p = pa.getPos();
+		glm::vec3 v = pa.getVelocity();
+		v[gi] = g->sample(p.x,p.y);
+		pa.setVelocity(v);
 	}
 }
 
@@ -138,13 +156,16 @@ void FLIP::addForces(){
 
 void FLIP::classifyCells(){
 	cell.setAll(0);
-	float half = dx/2.0;
+	float half = 0.5*dx;
 	// each cell containing at least one particle is a FLUID cell
-	for(auto pa : particleSet.pl.particles){
-		glm::ivec3 pCell = glm::ivec3(int((pa.p[0]+half)/dx),int((pa.p[1]+half)/dx),int((pa.p[2]+half)/dx));
-		if(pCell[0] >= 0 && pCell[0] < cell.size[0] &&
-		   pCell[1] >= 0 && pCell[1] < cell.size[1])
-			cell(pCell[0], pCell[1]) = FLUID;
+	for(auto pa : particleSet.particles){
+		glm::vec3 p = pa.getPos();
+		glm::ivec2 pCell = cell.cellID(p.x,p.y);
+		//std::cerr << "particle in cell " << pCell[0] << " " << pCell[1] << std::endl;
+		//std::cerr << p << std::endl;
+		assert(pCell[0] >= 0 && pCell[0] < cell.size[0] && pCell[1] >= 0 && pCell[1] < cell.size[1]);
+		//std::cerr << pCell[0] << " " << pCell[1] << std::endl;
+		cell(pCell[0], pCell[1]) = FLUID;
 	}
 	// find SOLID and AIR cells
 	for(int i = 0; i < cell.size[0]; i++)
@@ -172,14 +193,13 @@ void FLIP::solvePressure(){
 	for(int i = 0; i < size[0]; i++)
 		for(int j = 0; j < size[1]; j++){
 			if(cell(i,j) == FLUID){
-				ps.B(ij(i,j)) = -scale * ((*u)(i+1,j) - (*u)(i,j) +
-						(*v)(i,j+1) - (*v)(i,j));
+				ps.B(ij(i,j)) = -scale * ((*u)(i+1,j) - (*u)(i,j) + (*v)(i,j+1) - (*v)(i,j));
 				if(cell(i-1,j) == SOLID)
-					ps.B(ij(i,j)) -= scale * ((*u)(i,j) - solidVelocity(i,j)[0]);
+					ps.B(ij(i,j)) -= scale * ((*u)(i,j) - solidVelocity(i-1,j)[0]);
 				if(cell(i+1,j) == SOLID)
 					ps.B(ij(i,j)) += scale * ((*u)(i+1,j) - solidVelocity(i+1,j)[0]);
 				if(cell(i,j-1) == SOLID)
-					ps.B(ij(i,j)) -= scale * ((*v)(i,j) - solidVelocity(i,j)[1]);
+					ps.B(ij(i,j)) -= scale * ((*v)(i,j) - solidVelocity(i,j-1)[1]);
 				if(cell(i,j+1) == SOLID)
 					ps.B(ij(i,j)) += scale * ((*v)(i,j+1) - solidVelocity(i,j+1)[1]);
 			}
@@ -255,11 +275,24 @@ void FLIP::enforceBoundary(){
 }
 
 void FLIP::advect(){
-	for(Particle& pa : particleSet.pl.particles){
-		pa.p = glm::vec3(
-				pa.p.x + dt*pa.v.x,
-				pa.p.y + dt*pa.v.y,
-				pa.p.z + dt*pa.v.z);
+	for(Particle& pa : particleSet.particles){
+		glm::vec3 p = pa.getPos();
+		glm::vec3 v = pa.getVelocity();
+		glm::vec3 e = p + dt*v;
+		
+		int curCell = cell.dSample(e.x,e.y,-1);
+		if(curCell < 0 || curCell == CellType::SOLID){
+			while(glm::distance(p,e) > 1e-5 && (curCell < 0 || curCell == CellType::SOLID)){
+				glm::vec3 m = 0.5f*p + 0.5f*e;
+				curCell = cell.dSample(m.x,m.y,-1);
+				if(curCell < 0 || curCell == CellType::SOLID)
+					e = m;
+				else p = m;
+				curCell = cell.dSample(e.x,e.y,-1);
+			}
+			e -= (dt/10.0f)*v;
+		}
+		pa.setPos(e);
 	}
 }
 

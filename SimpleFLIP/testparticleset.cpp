@@ -26,6 +26,9 @@ glm::vec2 panStart;
 int W = 10, H = 10;
 int I, J;
 ParticleSet ps;
+double OFFSET = 0.1;
+double SPACING = 0.2;
+double RADIUS = 0.2;
 
 void init(){
 	srand (time(NULL));
@@ -33,26 +36,29 @@ void init(){
 	// first add points for the grid
 	for(int i = 0; i < 6; i++)
 		for(int j = 0; j < 5; j++)
-			ps.add(glm::vec3(float(i)-0.5,j,0),glm::vec3(0,0,0),glm::vec3(0,0,0));
+			ps.add(glm::vec3(SPACING*float(i)-OFFSET,SPACING*j,0),glm::vec3(0,0,0),glm::vec3(0,0,0));
+	for(int i = 0; i < 5; i++)
+		for(int j = 0; j < 6; j++)
+			ps.add(glm::vec3(SPACING*i,SPACING*float(j)-OFFSET,0),glm::vec3(0,0,0),glm::vec3(0,0,0));
 	for(int i = 0; i < 5; i++)
 		for(int j = 0; j < 5; j++)
-			ps.add(glm::vec3(i,j,0),glm::vec3(0,0,0),glm::vec3(0,0,0));
-	
-	ps.add(glm::vec3(0,0,0),glm::vec3(0,0,0),glm::vec3(0,0,0));
-	ps.add(glm::vec3(1,0,0),glm::vec3(0,0,0),glm::vec3(0,0,0));
-	ps.add(glm::vec3(1,1,0),glm::vec3(0,0,0),glm::vec3(0,0,0));
-	ps.add(glm::vec3(0,1,0),glm::vec3(0,0,0),glm::vec3(0,0,0));
+			ps.add(glm::vec3(SPACING*i,SPACING*j,0),glm::vec3(0,0,0),glm::vec3(0,0,0));
 	for(int i = 0; i < W*W; i++){
-		float x = float(rand())/RAND_MAX; x*=5;
-		float y = float(rand())/RAND_MAX; y*=5;
+		float x = float(rand())/RAND_MAX; x*=5*SPACING;
+		float y = float(rand())/RAND_MAX; y*=5*SPACING;
 		ps.add(glm::vec3(x,y,0),glm::vec3(0,0,0),glm::vec3(0,0,0));
 	}
-	ps.init();
 
-	W = H = 5*6; //ps.pl.particles.size();
+	W = H = 5*6; 
 }
 
 void render(){
+
+	ParticleSetAccessor psu, psp, psv;
+	psu.set(ps, glm::vec3(OFFSET,0,0),SPACING);
+	psv.set(ps, glm::vec3(0,OFFSET,0),SPACING);
+	psp.set(ps, glm::vec3(0,0,0),SPACING);
+	
 	glClearColor(0,0,0,0);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glEnable(GL_DEPTH_TEST);
@@ -60,31 +66,38 @@ void render(){
 	glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 	camera.look();	
+	
+	int II = I + 5*6;
+	int JJ = J + 6*5;
 
 	glPointSize(3.0);
 	glBegin(GL_POINTS);
 	glColor3f(1,0,0);
 		for(int i = 0; i < 5*6; i++)
-			glVertex2f(ps.pl.particles[i].p.x,ps.pl.particles[i].p.y);
+			glVertex2f(ps.particles[i].p.x,ps.particles[i].p.y);
+	glColor3f(0,1,0);
+		for(int i = 5*6; i < 5*6*2; i++)
+			glVertex2f(ps.particles[i].p.x,ps.particles[i].p.y);
 	glColor3f(1,1,1);
-		for(int i = 5*6; i < 5*6 + 5*5; i++)
-			glVertex2f(ps.pl.particles[i].p.x,ps.pl.particles[i].p.y);
+		for(int i = 2*5*6; i < 2*5*6 + 5*5; i++)
+			glVertex2f(ps.particles[i].p.x,ps.particles[i].p.y);
 	glEnd();
 	glPointSize(3.0);
 	glBegin(GL_POINTS);
 	glColor3f(0,1,1);
-	for(int i = 0; i < ps.pl.particles.size(); i++)
-		glVertex2f(ps.pl.particles[i].p.x,ps.pl.particles[i].p.y);
+	for(int i = 0; i < ps.particles.size(); i++)
+		glVertex2f(ps.particles[i].p.x,ps.particles[i].p.y);
 	glEnd();
 	
 	glPointSize(10.0);
 	glBegin(GL_POINTS);
 	glColor3f(1,0,1);
-		glVertex2f(ps.pl.particles[I].p.x,ps.pl.particles[I].p.y);
+		glVertex2f(ps.particles[II].p.x,ps.particles[II].p.y);
 	glEnd();
+	
 
-	glm::vec3 bmin = glm::vec3(ps.pl.particles[I].p.x-0.5,ps.pl.particles[I].p.y-0.5,-1.0);
-	glm::vec3 bmax = glm::vec3(ps.pl.particles[I].p.x+0.5,ps.pl.particles[I].p.y+0.5,1.0);
+	glm::vec3 bmin = glm::vec3(ps.particles[II].p.x-RADIUS*1.0,ps.particles[II].p.y-RADIUS*1.0,-1.0);
+	glm::vec3 bmax = glm::vec3(ps.particles[II].p.x+RADIUS*1.0,ps.particles[II].p.y+RADIUS*1.0,1.0);
 	glBegin(GL_LINE_LOOP);
 		glVertex2f(bmin.x,bmin.y);
 		glVertex2f(bmin.x,bmax.y);
@@ -94,19 +107,19 @@ void render(){
 	
 	glColor3f(1,0,1);
 	glBegin(GL_POINTS);
-	ps.iterateNeighbours(bmin, bmax, [](const Particle& pa){
+	psu.iterateNeighbours(ps, bmin, bmax, [](const Particle& pa){
 				glVertex2f(pa.p.x,pa.p.y);
 			});
 	glEnd();
 	
 	glBegin(GL_POINTS);
 	glColor3f(0,0,1);
-		glVertex2f(ps.pl.particles[J].p.x,ps.pl.particles[J].p.y);
+		glVertex2f(ps.particles[JJ].p.x,ps.particles[JJ].p.y);
 	glEnd();
 
 	glColor3f(1,1,0);
 	glBegin(GL_POINTS);
-	ps.iterateNeighbours(ps.pl.particles[J].p, 0.5, [](const Particle& pa){
+	psu.iterateNeighbours(ps, ps.particles[JJ].p, RADIUS, [](const Particle& pa){
 				glVertex2f(pa.p.x,pa.p.y);
 			});
 	glEnd();
@@ -114,8 +127,8 @@ void render(){
 		float step = acos(-1.0)/20;
 		float angle = 0.0;
 		while(angle < 2*acos(-1.0)){
-			glVertex2f(	0.5*cos(angle) + ps.pl.particles[J].p.x,
-					0.5*sin(angle) + ps.pl.particles[J].p.y);
+			glVertex2f(	RADIUS*cos(angle) + ps.particles[JJ].p.x,
+					RADIUS*sin(angle) + ps.particles[JJ].p.y);
 			angle += step;
 		}
 	glEnd();
@@ -183,6 +196,19 @@ void keyboard(int key, int action){
 		I = max(0, I - 1);
 	if(key == GLFW_KEY_D && action == GLFW_PRESS)
 		I = min(I+1,H-1);
+	if(key == GLFW_KEY_M && action == GLFW_PRESS){
+	for(int i = 5*6*2; i < ps.particles.size(); i++)
+		ps.particles[i].setPos(glm::vec3(
+			ps.particles[i].p.x +  (float(rand())/RAND_MAX)*SPACING,
+			ps.particles[i].p.y +  (float(rand())/RAND_MAX)*SPACING,
+			ps.particles[i].p.z +  (float(rand())/RAND_MAX)*SPACING
+		));
+	}
+	if(key == GLFW_KEY_C && action == GLFW_PRESS){
+	float x = float(rand())/RAND_MAX; x*=5*SPACING;
+	float y = float(rand())/RAND_MAX; y*=5*SPACING;
+	ps.add(glm::vec3(x,y,0),glm::vec3(0,0,0),glm::vec3(0,0,0));
+	}
 }
 
 int main(int argc, char **argv){

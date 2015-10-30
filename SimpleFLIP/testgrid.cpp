@@ -23,14 +23,17 @@ bool rotating = false;
 bool translating = false;
 glm::vec2 panStart;
 
-int W = 10, H = 10;
+int W = 10, H = 5;
 int I, J;
+double SPACING = 1.0;
 Grid<float> g;
 
 void init(){
 	srand (time(NULL));
 	
 	g.set(W,H);
+	g.cellSize = SPACING;
+	g.offset = glm::vec2(0,0);
 }
 
 void render(){
@@ -44,28 +47,47 @@ void render(){
 	
 	glColor4f(1,1,1,0.5);
 	glBegin(GL_LINES);
-		for(int i = 0; i < W; i++){
-			glVertex2f(i, 0); glVertex2f(i, W-1);
+		for(int i = 0; i <= W; i++){
+			glm::vec2 p = g.gridToWorld(glm::vec2(i,0)); p -= g.cellSize*0.5f;
+			glVertex2f(p.x, p.y); 
+			p = g.gridToWorld(glm::vec2(i,H)); p -= g.cellSize*0.5f;
+			glVertex2f(p.x, p.y);
 		}
-		for(int i = 0; i < H; i++){
-			glVertex2f(0, i); glVertex2f(H-1, i);
+		for(int i = 0; i <= H; i++){
+			glm::vec2 p = g.gridToWorld(glm::vec2(0,i)); p -= g.cellSize*0.5f;
+			glVertex2f(p.x, p.y); 
+			p = g.gridToWorld(glm::vec2(W,i)); p -= g.cellSize*0.5f;
+			glVertex2f(p.x, p.y);
 		}
 	glEnd();
 
 	glPointSize(5.0);
 	glBegin(GL_POINTS);
+		glColor3f(1,0,1);
+		for(int i = 0; i < W; i++)
+			for(int j = 0; j < H; j++){
+				glm::vec2 p = g.gridToWorld(glm::vec2(i,j));
+				glVertex2f(p.x,p.y);
+			}
+			
 		for(int i = 0; i < W; i++)
 			for(int j = 0; j < H; j++){
 				float c = g(i,j);
 				glColor3f(c,c,c);
-				glVertex2f(i,j);
+				glm::vec2 p = g.gridToWorld(glm::vec2(i,j));
+				if(c > 0.0)
+					glVertex3f(p.x,p.y,0.1);
+				else glVertex2f(p.x,p.y);
 			}
-
+			
+		//std::cerr << g.sample(1*g.cellSize,1*g.cellSize) << std::endl;
+		//glColor3f(1,1,1);
+		//glVertex3f(1*g.cellSize,1*g.cellSize,0.1);
 		float step = 1.0/5.0;
-		float s1 = -2.0;
-		while(s1 < (float)W){
-			float s2 = -2.0;
-			while(s2 < (float)H){
+		float s1 = -g.cellSize;
+		while(s1 < ((float)W)*g.cellSize){
+			float s2 = -g.cellSize;
+			while(s2 < ((float)H)*g.cellSize){
 				float c = g.sample(s1,s2);
 				glColor3f(c,c,c);
 				glVertex2f(s1,s2);
@@ -141,6 +163,11 @@ void keyboard(int key, int action){
 		g.setAll(0);
 	if(key == GLFW_KEY_F && action == GLFW_PRESS){
 		g.setAll(0);
+		//g(1,1) = 1;
+		//g(2,2) = 1;
+		//g(2,1) = 1;
+		//g(1,2) = 1;
+		//return;
 		int n = rand() % W;
 		for(int i = 0; i < n; i++)
 			g(rand() % W, rand() % H) = 1.0;

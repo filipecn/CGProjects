@@ -22,7 +22,8 @@ bool translating = false;
 glm::vec2 panStart;
 
 FLIP flip;
-int W = 10, H = 10;
+ParticleSetAccessor psa;
+int W = 25, H = 25;
 int I, J;
 
 void init(){
@@ -30,12 +31,14 @@ void init(){
 	flip.dx = 0.1;
 	flip.dt = 0.001;
 	flip.rho = 1.0;
-	flip.gravity = 9.8;
+	flip.gravity = -9.8;
+	
+	for(int i = 1; i <= 23; i++)
+		for(int j = 10; j <= 15; j++)
+			flip.fillCell(i,j);
+	
 	flip.init();
 	
-	for(int i = 3; i <= 6; i++)
-		for(int j = 3; j <= 6; j++)
-			flip.fillCell(i,j);
 	for(int i = 0; i < W; i++){
 		flip.isSolid(i,0) = true;
 		flip.isSolid(i,H-1) = true;
@@ -44,7 +47,9 @@ void init(){
 		flip.isSolid(0,j) = true;
 		flip.isSolid(W-1,j) = true;
 	}
-	flip.particleSet.init();
+	
+	psa.set(flip.particleSet, glm::vec3(0.5*flip.dx,0,0),flip.dx);
+		
 }
 
 void drawCells(){
@@ -69,7 +74,7 @@ void drawCells(){
 void drawGridVelocities(){
 	glPointSize(5.0);
 	glBegin(GL_LINES);
-	flip.grid.iterateGrids([](std::shared_ptr<Grid<float> > g){
+	flip.grid.iterateGrids([](GridPtr<float> g){
 			static int gind = 0;
 			switch(gind % 3){
 			case 0: glColor3f(1,1,1); break;
@@ -78,14 +83,12 @@ void drawGridVelocities(){
 			}
 			for(int i = 0; i < g->size.x; i++)
 			for(int j = 0; j < g->size.y; j++){
-				glVertex2f(float(i)*flip.dx + g->offset.x*flip.dx, float(j)*flip.dx + g->offset.y*flip.dx);
+				glm::vec2 wp = g->gridToWorld(glm::vec2(float(i),float(j)));
+				glVertex2f(wp.x, wp.y);
 				switch(gind % 3){
-				case 0: glVertex2f(float(i)*flip.dx + g->offset.x*flip.dx + flip.dt*(*g)(i,j),  
-					           float(j)*flip.dx + g->offset.y*flip.dx); break;
-				case 1: glVertex2f(float(i)*flip.dx + g->offset.x*flip.dx,  
-					           float(j)*flip.dx + g->offset.y*flip.dx + flip.dt*(*g)(i,j)); break;
-				case 2: glVertex2f(float(i)*flip.dx + g->offset.x*flip.dx, 
-						   float(j)*flip.dx + g->offset.y*flip.dx);
+				case 0: glVertex2f(wp.x + /*flip.dt**/(*g)(i,j), wp.y); break;
+				case 1: glVertex2f(wp.x, wp.y + /*flip.dt**/(*g)(i,j)); break;
+				case 2: glVertex2f(wp.x, wp.y);
 				}
 			}
 			gind++;
@@ -104,19 +107,21 @@ void drawGrid(){
 			case 2: glColor3f(1,1,0); break;
 			}
 			for(int i = 0; i < g->size.x; i++)
-			for(int j = 0; j < g->size.y; j++)
-				glVertex2f(float(i)*flip.dx + g->offset.x*flip.dx, float(j)*flip.dx + g->offset.y*flip.dx);
+			for(int j = 0; j < g->size.y; j++){
+				glm::vec2 wp = g->gridToWorld(glm::vec2(float(i),float(j)));
+				glVertex2f(wp.x, wp.y);
+			}
 			});
 	glEnd();
 
 	glColor4f(1,1,1,0.5);
 	glBegin(GL_LINES);
 	float half = flip.dx/2.0;
-	for(int i = 0; i < flip.size.x; i++){
+	for(int i = 0; i <= flip.size.x; i++){
 			glVertex2f(float(i)*flip.dx - half,0.0 - half);
 			glVertex2f(float(i)*flip.dx - half,float(flip.size.y)*flip.dx - half);
 		}
-	for(int i = 0; i < flip.size.y; i++){
+	for(int i = 0; i <= flip.size.y; i++){
 			glVertex2f(0.0 - half,float(i)*flip.dx - half);
 			glVertex2f(float(flip.size.x)*flip.dx - half,float(i)*flip.dx - half);
 		}
@@ -127,20 +132,25 @@ void drawParticles(){
 	glPointSize(3.0);
 	glColor3f(0,0,1);
 	glBegin(GL_POINTS);
-	for(auto p : flip.particleSet.pl.particles){
-		glVertex2f(p.p.x,p.p.y);
+	for(auto p : flip.particleSet.particles){
+		glm::vec3 pos = p.getPos();
+		glVertex2f(pos.x,pos.y);
 	}
 	glEnd();
 	glColor4f(0,0,1,0.5);
 	glBegin(GL_LINES);
-	for(auto p : flip.particleSet.pl.particles){
-		glVertex2f(p.p.x,p.p.y);
-		glVertex2f(p.p.x + flip.dt*p.v.x, p.p.y + flip.dt*p.v.y);
+	for(auto p : flip.particleSet.particles){
+		glm::vec3 pos = p.getPos();
+		glm::vec3 v = p.getVelocity();
+		glVertex2f(pos.x,pos.y);
+		glVertex2f(pos.x + /*flip.dt**/v.x, pos.y + /*flip.dt**/v.y);
 	}
 	glEnd();
 }
 
 void render(){
+	flip.step();
+	
 	glClearColor(0,0,0,0);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glEnable(GL_DEPTH_TEST);
@@ -148,18 +158,18 @@ void render(){
 	glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 	camera.look();	
-
+	
 	drawCells();
 	drawGrid();	
 	drawParticles();
 	drawGridVelocities();
-
+	
 	glPointSize(4.0);
 	glColor3f(1,0,1);
-	glm::vec3 boxMin = glm::vec3(float(I)*flip.dx - flip.dx, 
-				     float(J)*flip.dx - 0.5*flip.dx - flip.dx, 0.f);
-	glm::vec3 boxMax = glm::vec3(float(I)*flip.dx + flip.dx, 
-				     float(J)*flip.dx - 0.5*flip.dx + flip.dx, 0.f);
+	glm::vec3 boxMin = glm::vec3(float(I)*flip.dx               - flip.dx, 
+				                 float(J)*flip.dx - flip.dx*0.5	- flip.dx, -1.0f);
+	glm::vec3 boxMax = glm::vec3(float(I)*flip.dx               + flip.dx, 
+				                 float(J)*flip.dx - flip.dx*0.5	+ flip.dx,  1.0f);
 	glBegin(GL_LINE_LOOP);
 		glVertex3f(boxMin.x,boxMin.y,0.001);
 		glVertex3f(boxMin.x,boxMax.y,0.001);
@@ -169,10 +179,11 @@ void render(){
 	
 	glPointSize(5.0);
 	glBegin(GL_POINTS);
-		glVertex3f(float(I)*flip.dx, float(J)*flip.dx - 0.5*flip.dx, 0.001);
-		//std::cout << (float(I)*flip.dx) << " , " << (float(J)*flip.dx - 0.5*flip.dx) << std::endl;
-		flip.particleSet.iterateNeighbours(boxMin,boxMax,[](const Particle& p){
-				glVertex3f(p.p.x,p.p.y,p.p.z);
+		glVertex3f(float(I)*flip.dx, float(J)*flip.dx - flip.dx*0.5, 0.001);
+		psa.update(flip.particleSet);
+		psa.iterateNeighbours(flip.particleSet, boxMin, boxMax, [](const Particle& p){
+				glm::vec3 pos = p.getPos();
+				glVertex3f(pos.x,pos.y,pos.z);
 				});
 	glEnd();
 }
@@ -231,13 +242,13 @@ void keyboard(int key, int action){
 	if(key == GLFW_KEY_Q && action == GLFW_PRESS)
 		gd->stop();
 	if(key == GLFW_KEY_W && action == GLFW_PRESS)
-		J = min(J+1,H-1);
+		J = min(J+1,H);
 	if(key == GLFW_KEY_S && action == GLFW_PRESS)
 		J = max(0, J - 1);
 	if(key == GLFW_KEY_A && action == GLFW_PRESS)
 		I = max(0, I - 1);
 	if(key == GLFW_KEY_D && action == GLFW_PRESS)
-		I = min(I+1,H-1);
+		I = min(I+1,W);
 	if(key == GLFW_KEY_G && action == GLFW_PRESS){
 		flip.gather(0);
 		flip.gather(1);
