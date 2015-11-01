@@ -82,29 +82,29 @@ void FLIP::fillCell(int i, int j){
 			particleSet.add(glm::vec3(float(i)*dx + (x-1)*subsize + ((double) rand() / (RAND_MAX))*subsize,
 									  float(j)*dx + (y-1)*subsize + ((double) rand() / (RAND_MAX))*subsize, 0.0),
 					glm::vec3(0,0,0),
-					glm::vec3(0,0,0));
+					glm::vec3(0,-10.0,0));
 					
-			/*particleSet.add(glm::vec3(float(i)*dx,
-									  float(j)*dx - dx*0.5, 0.0),
+			particleSet.add(glm::vec3(float(i)*dx,
+									  float(j)*dx, 0.0),
 					glm::vec3(0,0,0),
-					glm::vec3(0,10,0));*/
+					glm::vec3(10,-10,0));
 					return;
 		}
 	}
 }
 
 void FLIP::step(){
-	advect();
+	//advect();
 	for(int i = 0; i < 3; i++)
 		psa[i].update(particleSet);
 	gather(GridType::U);
 	gather(GridType::V);
 	classifyCells();
-	addForces();
-	solvePressure();
-	enforceBoundary();
-	scatter(GridType::U);
-	scatter(GridType::V);
+	//addForces();
+	//solvePressure();
+	//enforceBoundary();
+	//scatter(GridType::U);
+	//scatter(GridType::V);
 }
 
 void FLIP::gather(uint gi){

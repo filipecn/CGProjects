@@ -1,6 +1,6 @@
 #pragma once
 
-#include "MathUtils.hpp"
+#include "utils.h"
 
 #include <iostream>
 #include <glm/glm.hpp>

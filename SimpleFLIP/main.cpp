@@ -4,6 +4,8 @@
 #include <Aergia.h>
 #include <GL/glut.h>
 #include "FLIP.h"
+#include "GridPtrAccessor.h"
+#include "GridAccessor.h"
 
 using aergia::io::GraphicsDisplay;
 using aergia::math::Transform;
@@ -22,9 +24,12 @@ bool translating = false;
 glm::vec2 panStart;
 
 FLIP flip;
-ParticleSetAccessor psa;
-int W = 25, H = 25;
-int I, J;
+ParticleSetAccessor psa_u, psa_v, psa_c;
+GridPtrAccessor<float> uAcc, vAcc;
+GridAccessor<char> cAcc;
+
+int W = 5, H = 5;
+int mode;
 
 void init(){
 	flip.size = glm::ivec2(W,H);
@@ -33,99 +38,30 @@ void init(){
 	flip.rho = 1.0;
 	flip.gravity = -9.8;
 	
-	for(int i = 1; i <= 23; i++)
-		for(int j = 10; j <= 15; j++)
+	for(int i = 1; i <= 3; i++)
+		for(int j = 1; j <= 3; j++)
 			flip.fillCell(i,j);
 	
 	flip.init();
 	
 	for(int i = 0; i < W; i++){
 		flip.isSolid(i,0) = true;
+		//flip.isSolid(i,1) = true;
 		flip.isSolid(i,H-1) = true;
+		//flip.isSolid(i,H-2) = true;
 	}
 	for(int j = 0; j < H; j++){
 		flip.isSolid(0,j) = true;
+		//flip.isSolid(1,j) = true;
 		flip.isSolid(W-1,j) = true;
+		//flip.isSolid(W-2,j) = true;
 	}
 	
-	psa.set(flip.particleSet, glm::vec3(0.5*flip.dx,0,0),flip.dx);
-		
-}
-
-void drawCells(){
-	for(int i = 0; i < flip.size[0]; i++)
-		for(int j = 0; j < flip.size[1]; j++){
-			switch(flip.cell(i,j)){
-				case CellType::FLUID: glColor4f(0,0,1,0.3); break;
-				case CellType::SOLID: glColor4f(0.5,0.5,0.5,0.3); break;
-				case CellType::AIR: glColor4f(1,1,1,0.3); break;
-				default: continue;
-			}
-			float half = flip.dx/2.0;
-			glBegin(GL_QUADS);
-				glVertex3f(float(i)*flip.dx - half, float(j)*flip.dx - half, -0.001);
-				glVertex3f(float(i)*flip.dx + flip.dx - half, float(j)*flip.dx - half, -0.001);
-				glVertex3f(float(i)*flip.dx + flip.dx - half, float(j)*flip.dx + flip.dx - half, -0.001);
-				glVertex3f(float(i)*flip.dx - half, float(j)*flip.dx + flip.dx - half, -0.001);
-			glEnd();
-		}
-}
-
-void drawGridVelocities(){
-	glPointSize(5.0);
-	glBegin(GL_LINES);
-	flip.grid.iterateGrids([](GridPtr<float> g){
-			static int gind = 0;
-			switch(gind % 3){
-			case 0: glColor3f(1,1,1); break;
-			case 1: glColor3f(0,1,1); break;
-			case 2: glColor3f(1,1,0); break;
-			}
-			for(int i = 0; i < g->size.x; i++)
-			for(int j = 0; j < g->size.y; j++){
-				glm::vec2 wp = g->gridToWorld(glm::vec2(float(i),float(j)));
-				glVertex2f(wp.x, wp.y);
-				switch(gind % 3){
-				case 0: glVertex2f(wp.x + /*flip.dt**/(*g)(i,j), wp.y); break;
-				case 1: glVertex2f(wp.x, wp.y + /*flip.dt**/(*g)(i,j)); break;
-				case 2: glVertex2f(wp.x, wp.y);
-				}
-			}
-			gind++;
-			});
-	glEnd();
-}
-
-void drawGrid(){
-	glPointSize(5.0);
-	glBegin(GL_POINTS);
-	flip.grid.iterateGrids([](std::shared_ptr<Grid<float> > g){
-			static int gind = 0;
-			switch(gind++ % 3){
-			case 0: glColor3f(1,1,1); break;
-			case 1: glColor3f(0,1,1); break;
-			case 2: glColor3f(1,1,0); break;
-			}
-			for(int i = 0; i < g->size.x; i++)
-			for(int j = 0; j < g->size.y; j++){
-				glm::vec2 wp = g->gridToWorld(glm::vec2(float(i),float(j)));
-				glVertex2f(wp.x, wp.y);
-			}
-			});
-	glEnd();
-
-	glColor4f(1,1,1,0.5);
-	glBegin(GL_LINES);
-	float half = flip.dx/2.0;
-	for(int i = 0; i <= flip.size.x; i++){
-			glVertex2f(float(i)*flip.dx - half,0.0 - half);
-			glVertex2f(float(i)*flip.dx - half,float(flip.size.y)*flip.dx - half);
-		}
-	for(int i = 0; i <= flip.size.y; i++){
-			glVertex2f(0.0 - half,float(i)*flip.dx - half);
-			glVertex2f(float(flip.size.x)*flip.dx - half,float(i)*flip.dx - half);
-		}
-	glEnd();
+	psa_v.set(flip.particleSet, glm::vec3(0.5*flip.dx,0,0),flip.dx);
+	psa_u.set(flip.particleSet, glm::vec3(0,0.5*flip.dx,0),flip.dx);
+	psa_c.set(flip.particleSet, glm::vec3(0,0,0),flip.dx*0.5);
+	uAcc.setGrid(flip.grid.get(0));
+	vAcc.setGrid(flip.grid.get(1));
 }
 
 void drawParticles(){
@@ -149,7 +85,7 @@ void drawParticles(){
 }
 
 void render(){
-	flip.step();
+	//flip.step();
 	
 	glClearColor(0,0,0,0);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -159,33 +95,47 @@ void render(){
 
 	camera.look();	
 	
-	drawCells();
-	drawGrid();	
-	drawParticles();
-	drawGridVelocities();
-	
-	glPointSize(4.0);
-	glColor3f(1,0,1);
-	glm::vec3 boxMin = glm::vec3(float(I)*flip.dx               - flip.dx, 
-				                 float(J)*flip.dx - flip.dx*0.5	- flip.dx, -1.0f);
-	glm::vec3 boxMax = glm::vec3(float(I)*flip.dx               + flip.dx, 
-				                 float(J)*flip.dx - flip.dx*0.5	+ flip.dx,  1.0f);
-	glBegin(GL_LINE_LOOP);
-		glVertex3f(boxMin.x,boxMin.y,0.001);
-		glVertex3f(boxMin.x,boxMax.y,0.001);
-		glVertex3f(boxMax.x,boxMax.y,0.001);
-		glVertex3f(boxMax.x,boxMin.y,0.001);
-	glEnd();
-	
+	cAcc.paintGrid(flip.cell);
+	uAcc.drawVelocities(glm::vec2(1.0,0.0),flip.dt);
+	vAcc.drawVelocities(glm::vec2(0.0,1.0),flip.dt);
 	glPointSize(5.0);
-	glBegin(GL_POINTS);
-		glVertex3f(float(I)*flip.dx, float(J)*flip.dx - flip.dx*0.5, 0.001);
-		psa.update(flip.particleSet);
-		psa.iterateNeighbours(flip.particleSet, boxMin, boxMax, [](const Particle& p){
-				glm::vec3 pos = p.getPos();
-				glVertex3f(pos.x,pos.y,pos.z);
+	glColor3f(1,1,1); cAcc.drawGridNodes(flip.cell);
+	glColor3f(0,1,1); uAcc.drawGridNodes();
+	glColor3f(1,1,0); vAcc.drawGridNodes();
+	cAcc.drawGrid(flip.cell);	
+	drawParticles();
+	
+	psa_u.update(flip.particleSet);
+	psa_v.update(flip.particleSet);
+	psa_c.update(flip.particleSet);
+	
+	switch(mode){
+		case 0:
+			uAcc.processCurrentNode(flip.dx, [](glm::vec3 boxMin, glm::vec3 boxMax){
+			psa_u.iterateNeighbours(flip.particleSet, boxMin, boxMax, [](const Particle& p){
+					glm::vec3 pos = p.getPos();
+					glVertex3f(pos.x,pos.y,pos.z);
 				});
-	glEnd();
+	
+			});
+	break;
+	case 1:
+			vAcc.processCurrentNode(flip.dx, [](glm::vec3 boxMin, glm::vec3 boxMax){
+			psa_v.iterateNeighbours(flip.particleSet, boxMin, boxMax, [](const Particle& p){
+					glm::vec3 pos = p.getPos();
+					glVertex3f(pos.x,pos.y,pos.z);
+				});
+			});	
+	break;
+	case 2:
+			cAcc.processCurrentNode(flip.cell, 0.5*flip.dx, [](glm::vec3 boxMin, glm::vec3 boxMax){
+			psa_v.iterateNeighbours(flip.particleSet, boxMin, boxMax, [](const Particle& p){
+					glm::vec3 pos = p.getPos();
+					glVertex3f(pos.x,pos.y,pos.z);
+				});
+			});	
+	}
+	
 }
 
 glm::vec3 screenToSphere(double x, double y){
@@ -241,14 +191,16 @@ void mouseScroll(double x, double y){
 void keyboard(int key, int action){
 	if(key == GLFW_KEY_Q && action == GLFW_PRESS)
 		gd->stop();
-	if(key == GLFW_KEY_W && action == GLFW_PRESS)
-		J = min(J+1,H);
-	if(key == GLFW_KEY_S && action == GLFW_PRESS)
-		J = max(0, J - 1);
-	if(key == GLFW_KEY_A && action == GLFW_PRESS)
-		I = max(0, I - 1);
-	if(key == GLFW_KEY_D && action == GLFW_PRESS)
-		I = min(I+1,W);
+	glm::vec2 delta(0,0);
+	if(key == GLFW_KEY_W && action == GLFW_PRESS) delta = glm::ivec2(0,1);
+	if(key == GLFW_KEY_S && action == GLFW_PRESS) delta = glm::ivec2(0,-1);
+	if(key == GLFW_KEY_A && action == GLFW_PRESS) delta = glm::ivec2(-1,0);
+	if(key == GLFW_KEY_D && action == GLFW_PRESS) delta = glm::ivec2(1,0);
+	switch(mode){
+		case 0: uAcc.move(delta); break;
+		case 1: vAcc.move(delta); break;
+		case 2: cAcc.move(flip.cell, delta); break;
+	}
 	if(key == GLFW_KEY_G && action == GLFW_PRESS){
 		flip.gather(0);
 		flip.gather(1);
@@ -257,6 +209,8 @@ void keyboard(int key, int action){
 		flip.step();
 	if(key == GLFW_KEY_Y && action == GLFW_PRESS)
 		flip.solvePressure();
+	if(key == GLFW_KEY_M && action == GLFW_PRESS)
+		mode = (mode+1)%3;
 }
 
 int main(int argc, char **argv){

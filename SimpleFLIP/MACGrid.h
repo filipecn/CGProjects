@@ -15,6 +15,7 @@ public:
 	~MACGrid();
 
 	void set(int w, int h, double dx);
+	const GridPtr<T> get(int g);
 
 	void iterateGrids(std::function<void(GridPtr<T>) > f);
 	GridPtr<T> get(uint i);
@@ -41,6 +42,11 @@ void MACGrid<T>::set(int w, int h, double dx){
 		grids[i]->cellSize = dx;
 		grids[i]->setAll(0.0);
 	}
+}
+
+template<typename T>
+inline const GridPtr<T> MACGrid<T>::get(int g){
+	return grids[g];
 }
 
 template<typename T>
