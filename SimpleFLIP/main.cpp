@@ -28,7 +28,7 @@ ParticleSetAccessor psa_u, psa_v, psa_c;
 GridPtrAccessor<float> uAcc, vAcc;
 GridAccessor<char> cAcc;
 
-int W = 5, H = 5;
+int W = 30, H = 30;
 int mode;
 
 void init(){
@@ -38,28 +38,32 @@ void init(){
 	flip.rho = 1.0;
 	flip.gravity = -9.8;
 	
-	for(int i = 1; i <= 3; i++)
-		for(int j = 1; j <= 3; j++)
+	for(int i = 2; i <= 28; i++)
+		for(int j = 2; j <= 10; j++)
+			flip.fillCell(i,j);
+			
+	for(int i = 12; i <= 12; i++)
+		for(int j = 20; j <= 20; j++)
 			flip.fillCell(i,j);
 	
 	flip.init();
 	
 	for(int i = 0; i < W; i++){
 		flip.isSolid(i,0) = true;
-		//flip.isSolid(i,1) = true;
-		flip.isSolid(i,H-1) = true;
+		flip.isSolid(i,1) = true;
+		//flip.isSolid(i,H-1) = true;
 		//flip.isSolid(i,H-2) = true;
 	}
 	for(int j = 0; j < H; j++){
 		flip.isSolid(0,j) = true;
-		//flip.isSolid(1,j) = true;
+		flip.isSolid(1,j) = true;
 		flip.isSolid(W-1,j) = true;
-		//flip.isSolid(W-2,j) = true;
+		flip.isSolid(W-2,j) = true;
 	}
 	
 	psa_v.set(flip.particleSet, glm::vec3(0.5*flip.dx,0,0),flip.dx);
 	psa_u.set(flip.particleSet, glm::vec3(0,0.5*flip.dx,0),flip.dx);
-	psa_c.set(flip.particleSet, glm::vec3(0,0,0),flip.dx*0.5);
+	psa_c.set(flip.particleSet, glm::vec3(0,0,0),flip.dx);
 	uAcc.setGrid(flip.grid.get(0));
 	vAcc.setGrid(flip.grid.get(1));
 }
@@ -73,6 +77,7 @@ void drawParticles(){
 		glVertex2f(pos.x,pos.y);
 	}
 	glEnd();
+	return;
 	glColor4f(0,0,1,0.5);
 	glBegin(GL_LINES);
 	for(auto p : flip.particleSet.particles){
@@ -85,7 +90,7 @@ void drawParticles(){
 }
 
 void render(){
-	//flip.step();
+	flip.step();
 	
 	glClearColor(0,0,0,0);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -95,20 +100,20 @@ void render(){
 
 	camera.look();	
 	
-	cAcc.paintGrid(flip.cell);
-	uAcc.drawVelocities(glm::vec2(1.0,0.0),flip.dt);
-	vAcc.drawVelocities(glm::vec2(0.0,1.0),flip.dt);
+	//cAcc.paintGrid(flip.cell);
+	//uAcc.drawVelocities(glm::vec2(1.0,0.0),flip.dt);
+	//vAcc.drawVelocities(glm::vec2(0.0,1.0),flip.dt);
 	glPointSize(5.0);
-	glColor3f(1,1,1); cAcc.drawGridNodes(flip.cell);
-	glColor3f(0,1,1); uAcc.drawGridNodes();
-	glColor3f(1,1,0); vAcc.drawGridNodes();
+	//glColor3f(1,1,1); cAcc.drawGridNodes(flip.cell);
+	//glColor3f(0,1,1); uAcc.drawGridNodes();
+	//glColor3f(1,1,0); vAcc.drawGridNodes();
 	cAcc.drawGrid(flip.cell);	
 	drawParticles();
 	
 	psa_u.update(flip.particleSet);
 	psa_v.update(flip.particleSet);
 	psa_c.update(flip.particleSet);
-	
+
 	switch(mode){
 		case 0:
 			uAcc.processCurrentNode(flip.dx, [](glm::vec3 boxMin, glm::vec3 boxMax){
@@ -116,7 +121,6 @@ void render(){
 					glm::vec3 pos = p.getPos();
 					glVertex3f(pos.x,pos.y,pos.z);
 				});
-	
 			});
 	break;
 	case 1:
@@ -125,11 +129,11 @@ void render(){
 					glm::vec3 pos = p.getPos();
 					glVertex3f(pos.x,pos.y,pos.z);
 				});
-			});	
+			});
 	break;
 	case 2:
 			cAcc.processCurrentNode(flip.cell, 0.5*flip.dx, [](glm::vec3 boxMin, glm::vec3 boxMax){
-			psa_v.iterateNeighbours(flip.particleSet, boxMin, boxMax, [](const Particle& p){
+			psa_c.iterateNeighbours(flip.particleSet, boxMin, boxMax, [](const Particle& p){
 					glm::vec3 pos = p.getPos();
 					glVertex3f(pos.x,pos.y,pos.z);
 				});

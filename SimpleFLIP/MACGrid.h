@@ -16,7 +16,7 @@ public:
 
 	void set(int w, int h, double dx);
 	const GridPtr<T> get(int g);
-
+	
 	void iterateGrids(std::function<void(GridPtr<T>) > f);
 	GridPtr<T> get(uint i);
 private:

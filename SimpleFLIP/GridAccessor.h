@@ -86,6 +86,7 @@ void GridAccessor<char>::paintGrid(Grid<char>& grid){
 			fill(grid,i,j);
 		}
 }
+
 template<typename T>
 void GridAccessor<T>::processCurrentNode(Grid<T>& grid, double radius, 
 std::function<void(glm::vec3 boxMin, glm::vec3 boxMax) > f){

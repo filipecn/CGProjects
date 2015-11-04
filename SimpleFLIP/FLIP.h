@@ -1,6 +1,7 @@
 #pragma once
 
 #include "MACGrid.h"
+#include "GridPtrAccessor.h"
 #include "ParticleSet.h"
 #include "Solver.h"
 
@@ -30,7 +31,6 @@ public:
 	Grid<char> cell;
 	Grid<bool> isSolid;
 	Grid<glm::vec3> solidVelocity;
-	// pressure solver
 	Solver ps; 
 
 	void init();
@@ -75,82 +75,101 @@ void FLIP::fillCell(int i, int j){
 	float subsize = dx / 2.0;
 	for(int x = 0; x < 2; x++){
 		for(int y = 0; y < 2; y++){
-			/*particleSet.add(glm::vec3(float(i)*dx + (x-1)*subsize + subsize/2.0,
+			particleSet.add(glm::vec3(float(i)*dx + (x-1)*subsize + subsize/2.0,
 									  float(j)*dx + (y-1)*subsize + subsize/2.0, 0.0 ),
 									  glm::vec3(0,0,0),
-									  glm::vec3(0,0,0));*/
+									  glm::vec3(0,0,0));
 			particleSet.add(glm::vec3(float(i)*dx + (x-1)*subsize + ((double) rand() / (RAND_MAX))*subsize,
 									  float(j)*dx + (y-1)*subsize + ((double) rand() / (RAND_MAX))*subsize, 0.0),
 					glm::vec3(0,0,0),
-					glm::vec3(0,-10.0,0));
+					glm::vec3(0,0.0,0));
 					
-			particleSet.add(glm::vec3(float(i)*dx,
+			/*particleSet.add(glm::vec3(float(i)*dx,
 									  float(j)*dx, 0.0),
 					glm::vec3(0,0,0),
-					glm::vec3(10,-10,0));
+					glm::vec3(10,-10,0));*/
 					return;
 		}
 	}
 }
 
 void FLIP::step(){
-	//advect();
 	for(int i = 0; i < 3; i++)
 		psa[i].update(particleSet);
 	gather(GridType::U);
 	gather(GridType::V);
 	classifyCells();
-	//addForces();
-	//solvePressure();
-	//enforceBoundary();
-	//scatter(GridType::U);
-	//scatter(GridType::V);
+	addForces();
+	solvePressure();
+	enforceBoundary();
+	scatter(GridType::U);
+	scatter(GridType::V);
+	advect();
 }
 
 void FLIP::gather(uint gi){
-	GridPtr<float> g = grid.get(gi);
-	for(int i = 0; i < g->size.x; i++)
-		for(int j = 0; j < g->size.y; j++){
-			glm::vec2 gp = g->gridToWorld(glm::vec2(float(i),float(j)));
-			glm::vec3 boxMin = glm::vec3(gp.x,gp.y,0.0) - glm::vec3(dx,dx,dx);
-			glm::vec3 boxMax = glm::vec3(gp.x,gp.y,0.0) + glm::vec3(dx,dx,dx);
-			float sum = 0.0;
-			float wsum = 0.0;
-			int total = 0;
-			psa[gi].iterateNeighbours(particleSet, boxMin, boxMax, [&total, &wsum, &sum, gi, gp, this](const Particle& p){
+	GridPtrAccessor<float> acc(grid.get(gi));
+	while(acc.test()){
+		glm::vec2 gp = acc.worldPosition();
+		glm::vec3 boxMin, boxMax;
+		acc.getBBox(dx,boxMin,boxMax);
+		float sum = 0.0, wsum = 0.0;
+		int total = 0;
+		psa[gi].iterateNeighbours(particleSet, boxMin, boxMax, 
+		[&total, &wsum, &sum, gi, gp, this](const Particle& p){
 				double k = 1.0;
 				glm::vec3 pos = p.getPos();
 				glm::vec3 vel = p.getVelocity();
-				for(int d = 0; d < 2; d++)
+				//std::cout << pos << " - " << gp.x << " " << gp.y << std::endl;
+				for(int d = 0; d < 2; d++){
 					k *= quadraticBSpline((pos[d] - gp[d])/dx);
+					//std::cout << "quadratic " <<  ((pos[d] - gp[d])/dx) << " = " << quadraticBSpline((pos[d] - gp[d])/dx) << std::endl;
+				}
 				wsum += k;
+				//std::cout << "k*v " << k << " * " << vel[gi] << std::endl;
 				sum += vel[gi]*k;
 				total++;
 			});
-			if(total && wsum != 0.0){
-				(*g)(i,j) = sum / wsum;
-			}
-			else 
-				(*g)(i,j) = 0.0;
-			vCopy[gi](i,j) = (*g)(i,j);
+			//std::cout << "sum " << sum << " wsum " << wsum << std::endl;
+			if(total && wsum != 0.0)
+				acc.set(sum / wsum);
+			else acc.set(0.0);
+			int i = -1, j = -1;
+			acc.curIndex(i,j);
+			//std::cout << i << "," << j << "------------------------------\n";
+			vCopy[gi](i,j) = acc.get();
+		acc.next();
 	}
+	return;
+	std::cout << "GRID " << gi << "----------------------\n";
+	acc.reset();
+	while(acc.test()){
+		int i, j; acc.curIndex(i,j);
+		std::cout << "(" << i << "," << j << ") " << acc.get();
+		acc.next();
+	}
+	std::cout << std::endl;
 }
 
 void FLIP::scatter(uint gi){
 	GridPtr<float> g = grid.get(gi);
+	for(int i = 0; i < g->size[0]; i++)
+		for(int j = 0; j < g->size[1]; j++)
+			(*g)(i,j) -= vCopy[gi](i,j);
 	for(Particle& pa : particleSet.particles){
 		glm::vec3 p = pa.getPos();
 		glm::vec3 v = pa.getVelocity();
-		v[gi] = g->sample(p.x,p.y);
+		v[gi] += g->sample(p.x,p.y);
 		pa.setVelocity(v);
 	}
 }
 
 void FLIP::addForces(){
-	GridPtr<float> v = grid.get(GridType::V);
-	for(int i = 0; i < v->size[0]; i++)
-		for(int j = 0; j < v->size[1]; j++)
-			(*v)(i,j) += gravity*dt;
+	GridPtrAccessor<float> acc(grid.get(GridType::V));
+	while(acc.test()){
+		acc.set(acc.get() + gravity*dt);
+		acc.next();
+	}
 	enforceBoundary();
 }
 

@@ -11,12 +11,19 @@ class GridPtrAccessor {
 	
 	public:
 	GridPtrAccessor();
+	GridPtrAccessor(GridPtr<T> g);
 	
 	void setGrid(GridPtr<T> g);
 	
+	void set(T v);
+	T get();
+	glm::vec2 worldPosition();
+	void curIndex(int &i, int &j);
+	bool reset();
+	bool test();
+	void next();
 	void move(glm::ivec2 delta);
-	
-	void iterateAll(std::function<void(int i, int j) >);
+	void getBBox(float radius, glm::vec3& boxMin, glm::vec3& boxMax);
 	
 	//OpenGL
 	void fill(int i, int j);
@@ -31,17 +38,70 @@ GridPtrAccessor<T>::GridPtrAccessor(){
 }
 
 template<typename T>
+GridPtrAccessor<T>::GridPtrAccessor(GridPtr<T> g){
+	setGrid(g);
+}
+
+template<typename T>
 void GridPtrAccessor<T>::setGrid(GridPtr<T> g){
 	grid = g;
 	curI = curJ = 0;
 }
 
 template<typename T>
+void GridPtrAccessor<T>::set(T v){
+	if(!test()) return;
+	(*grid)(curI,curJ) = v;	
+}
+
+template<typename T>
+T GridPtrAccessor<T>::get(){
+	return (*grid)(curI,curJ);	
+}
+
+template<typename T>
+glm::vec2 GridPtrAccessor<T>::worldPosition(){
+	return grid->gridToWorld(glm::vec2(float(curI), float(curJ)));
+}
+template<typename T>
+void GridPtrAccessor<T>::curIndex(int &i, int &j){
+	i = curI;
+	j = curJ;
+}
+template<typename T>
+bool GridPtrAccessor<T>::reset(){
+	curI = curJ = 0;
+}
+
+template<typename T>
+bool GridPtrAccessor<T>::test(){
+	return !(grid == nullptr || curI < 0 || curJ < 0 || curI >= grid->size[0] || curJ >= grid->size[1]);
+}
+
+template<typename T>
+void GridPtrAccessor<T>::next(){
+	if(!test()) return;
+	curI++;
+	if(curI >= grid->size[0]){
+		curI = 0;
+		curJ++;
+	}
+}
+	
+template<typename T>
 void GridPtrAccessor<T>::move(glm::ivec2 delta){
 	if(grid != nullptr){
 		curJ = max(0,min(grid->size[1],curJ+delta.y));
 		curI = max(0,min(grid->size[0],curI+delta.x));
 	}
+}
+
+template<typename T>
+void GridPtrAccessor<T>::getBBox(float radius, glm::vec3& boxMin, glm::vec3& boxMax){
+	if(!test()) return;
+	glm::vec2 wp = grid->gridToWorld(glm::vec2(float(curI),float(curJ)));
+	boxMin = glm::vec3(wp.x - radius, wp.y - radius, -1.0f);
+	boxMax = glm::vec3(wp.x + radius, wp.y + radius, 1.0f);
 }
 
 template<typename T>
