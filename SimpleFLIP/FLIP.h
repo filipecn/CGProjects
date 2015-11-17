@@ -88,7 +88,7 @@ void FLIP::fillCell(int i, int j){
 									  float(j)*dx, 0.0),
 					glm::vec3(0,0,0),
 					glm::vec3(10,-10,0));*/
-					return;
+					
 		}
 	}
 }

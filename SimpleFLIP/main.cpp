@@ -38,12 +38,12 @@ void init(){
 	flip.rho = 1.0;
 	flip.gravity = -9.8;
 	
-	for(int i = 2; i <= 28; i++)
+	for(int i = 2; i <= 27; i++)
 		for(int j = 2; j <= 10; j++)
 			flip.fillCell(i,j);
 			
 	for(int i = 12; i <= 12; i++)
-		for(int j = 20; j <= 20; j++)
+		for(int j = 20; j <= 25; j++)
 			flip.fillCell(i,j);
 	
 	flip.init();
@@ -51,8 +51,8 @@ void init(){
 	for(int i = 0; i < W; i++){
 		flip.isSolid(i,0) = true;
 		flip.isSolid(i,1) = true;
-		//flip.isSolid(i,H-1) = true;
-		//flip.isSolid(i,H-2) = true;
+		flip.isSolid(i,H-1) = true;
+		flip.isSolid(i,H-2) = true;
 	}
 	for(int j = 0; j < H; j++){
 		flip.isSolid(0,j) = true;
@@ -100,7 +100,7 @@ void render(){
 
 	camera.look();	
 	
-	//cAcc.paintGrid(flip.cell);
+	cAcc.paintGrid(flip.cell);
 	//uAcc.drawVelocities(glm::vec2(1.0,0.0),flip.dt);
 	//vAcc.drawVelocities(glm::vec2(0.0,1.0),flip.dt);
 	glPointSize(5.0);
