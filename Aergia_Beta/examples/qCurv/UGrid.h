@@ -218,19 +218,19 @@ class UGridIterator {
 		void filterCells(std::function<bool(typename UGrid<T>::Cell&)> f){
 			curIndex = 0;
 			filter = f;
-			next();
+			while(test() && !filter(grid->cells[curIndex])) curIndex++;
 		}
 		
 		void leafs(){
 			curIndex = 0;
 			filter = leafFilter;
-			next();
+			while(test() && !filter(grid->cells[curIndex])) curIndex++;
 		}
 		
 		void cells(){
 			curIndex = 0;
 			filter = emptyFilter;
-			next();
+			while(test() && !filter(grid->cells[curIndex])) curIndex++;
 		}
 		
 		bool test(){
@@ -244,6 +244,10 @@ class UGridIterator {
 		}
 		
 		const typename UGrid<T>::Cell operator*(){
+			return grid->cells[curIndex];
+		}
+		
+		const typename UGrid<T>::Cell& cell(){
 			return grid->cells[curIndex];
 		}
 		

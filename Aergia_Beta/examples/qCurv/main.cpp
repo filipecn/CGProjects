@@ -18,10 +18,9 @@ std::vector<Particle> particles;
 using namespace boost::numeric;
 using namespace interval_lib;
 void computeGradient(interval<double> X, interval<double> Y, Eigen::VectorXd v, interval<double>& GX, interval<double>& GY){
-	// x' = 2ax + cy + d
-	GX = 2.0*v[0]*X + v[2]*Y + v[3];
-	// y' = 2by + cx + e
-	GY = 2.0*v[1]*X + v[2]*Y + v[4];
+	// x' = 2ax + b
+	GX = 2.0*v[0]*X;
+	GY = interval<double>(-1,1);
 }
 
 class GridData : public IGridData<std::list<size_t> > {
@@ -64,6 +63,83 @@ UGridIterator<GridData> cur(&grid);
 std::function<bool(typename UGrid<GridData>::Cell&)> particlesFilter = [](typename UGrid<GridData>::Cell& c){
 				return c.children[0] < 0 && c.children[1] < 0 && c.children[2] < 0 && c.children[3] < 0 && c.data->data.size(); 	
 			};
+			
+double estimateCurvature(const typename UGrid<GridData>::Cell& c){
+	if(c.data->data.size() == 0)
+		return 0.0;
+	const GridData* d = c.data;
+	// COMPUTE PARTICLES CENTER AND MEAN NORMAL
+	glm::vec2 center, normal;
+	{
+		bool first = true;
+		for(auto pi : d->data){
+			glVertex(particles[pi].p);
+			if(first){
+				first = false;
+				center = particles[pi].p;
+				normal = particles[pi].n;
+			}
+			else{
+				center += particles[pi].p;
+				normal += particles[pi].n;	
+			}
+		}
+		if(d->data.size()){
+			center = center / float(d->data.size());
+			normal = glm::normalize(normal);
+		}
+	}
+	
+	// ROTATED PARTICLES
+	glm::vec2 u1 = glm::normalize(normal);
+	glm::vec2 u2 = glm::vec2(normal.y, -normal.x);
+	Eigen::VectorXd x;
+	{
+		Eigen::MatrixXd A(d->data.size(),3);
+		Eigen::VectorXd b(d->data.size());
+		int pIndex = 0;
+		for(auto pi : d->data){
+			glm::vec2 point = particles[pi].p - center;
+			glm::vec2 rotatedPoint = glm::vec2(glm::dot(point,u2),glm::dot(point,u1));
+			
+			//ax2 + bx + c
+			A(pIndex,0) = rotatedPoint.x*rotatedPoint.x;
+			A(pIndex,1) = rotatedPoint.x;
+			A(pIndex,2) = 1.0;
+			
+			b(pIndex) = rotatedPoint.y;
+			
+			pIndex++;
+		}
+			
+		x = A.colPivHouseholderQr().solve(b);
+	}
+	
+	// GRADIENT BOX
+	interval<double> GX,GY; 
+	{
+		float xmin, xmax, ymin, ymax;
+		bool first = true;
+		for(auto pi : d->data){
+			glm::vec2 point = particles[pi].p - center;
+			glm::vec2 rotatedPoint = glm::vec2(glm::dot(point,u2),glm::dot(point,u1));
+			//ax2 + by2 + cxy + dx + ey + f
+			if(first){
+				first = false;
+				xmin = xmax = rotatedPoint.x;
+				ymin = ymax = rotatedPoint.y;
+			}
+			xmin = std::min(rotatedPoint.x,xmin);
+			xmax = std::max(rotatedPoint.x,xmax);
+			ymin = std::min(rotatedPoint.y,ymin);
+			ymax = std::max(rotatedPoint.y,ymax);		
+		}
+		interval<double> X(xmin,xmax), Y(ymin,ymax);
+		computeGradient(X,Y,x,GX,GY);
+	}
+			std::cout << "WIDTHS " << width(GX) << "  " << width(GY) << std::endl;
+	return width(GX);
+}
 
 void render(){
 	glClearColor(1,1,1,0);
@@ -154,6 +230,7 @@ void render(){
 		glVertex(centerVis); glVertex(centerVis + glm::vec2(1,0));
 	glEnd();
 	
+	
 	// ROTATED PARTICLES
 	glm::vec2 u1 = glm::normalize(normal);
 	glm::vec2 u2 = glm::vec2(normal.y, -normal.x);
@@ -162,7 +239,7 @@ void render(){
 	glBegin(GL_POINTS);
 	if(cur.test()){
 		const GridData* d = cur.data();
-		Eigen::MatrixXd A(d->data.size(),6);
+		Eigen::MatrixXd A(d->data.size(),3);
 		Eigen::VectorXd b(d->data.size());
 		int pIndex = 0;
 		for(auto pi : d->data){
@@ -170,36 +247,62 @@ void render(){
 			glm::vec2 rotatedPoint = glm::vec2(glm::dot(point,u2),glm::dot(point,u1));
 			glVertex(rotatedPoint + centerVis);
 			
-			//ax2 + by2 + cxy + dx + ey + f
+			//ax2 + bx + c
 			A(pIndex,0) = rotatedPoint.x*rotatedPoint.x;
-			A(pIndex,1) = rotatedPoint.y*rotatedPoint.y;
-			A(pIndex,2) = rotatedPoint.x*rotatedPoint.y;
-			A(pIndex,3) = rotatedPoint.x;
-			A(pIndex,4) = rotatedPoint.y;
-			A(pIndex,5) = 1.0;
+			A(pIndex,1) = rotatedPoint.x;
+			A(pIndex,2) = 1.0;
 			
 			b(pIndex) = rotatedPoint.y;
 			
 			pIndex++;
 		}
+		std::cout << "MATRIX A\n";
+		std::cout << A << std::endl;
+		std::cout << b << std::endl;
+			
 		x = A.colPivHouseholderQr().solve(b);
 	}
 	glEnd();
 	
 	
-	// DRAW QUADRIC
+	// DRAW GRADIENT BOX
 	glColor4f(0,1,0,0.7);
-	glBegin(GL_LINES);
+	glm::vec2 boxPos = centerVis + glm::vec2(0,3);
+	glBegin(GL_LINE_LOOP);
 	if(cur.test()){
 		const GridData* d = cur.data();
+		float xmin, xmax, ymin, ymax;
+		bool first = true;
 		for(auto pi : d->data){
 			glm::vec2 point = particles[pi].p - center;
 			glm::vec2 rotatedPoint = glm::vec2(glm::dot(point,u2),glm::dot(point,u1));
 			//ax2 + by2 + cxy + dx + ey + f
-					
+			if(first){
+				first = false;
+				xmin = xmax = rotatedPoint.x;
+				ymin = ymax = rotatedPoint.y;
+			}
+			xmin = std::min(rotatedPoint.x,xmin);
+			xmax = std::max(rotatedPoint.x,xmax);
+			ymin = std::min(rotatedPoint.y,ymin);
+			ymax = std::max(rotatedPoint.y,ymax);		
 		}
+		interval<double> X(xmin,xmax), Y(ymin,ymax);
+		interval<double> GX,GY; 
+		computeGradient(X,Y,x,GX,GY);
+		std::cout << "printign \n";
+		std::cout << x << std::endl;
+		std::cout << xmin << " -> " << xmax << std::endl;
+		std::cout << lower(X) << " " << upper(X) << std::endl;
+		std::cout << lower(GX) << " " << upper(GX) << " " << width(GX) << std::endl;
+		std::cout << "WIDTHS " << width(GX) << "  " << width(GY) << std::endl;
+		glVertex(boxPos);
+		glVertex(boxPos + glm::vec2(float(width(GX)),0));
+		glVertex(boxPos + glm::vec2(float(width(GX)),float(width(GY))));
+		glVertex(boxPos + glm::vec2(0,float(width(GY))));
+		estimateCurvature(cur.cell());
 	}
-	glEnd();	
+	glEnd();		
 }
 
 void resize(int w, int h){
@@ -245,9 +348,10 @@ int main(){
 	grid.set(-5,10,-10,10,&firstData);
 	camera.setZoom(15);
 	camera.resize(800,800);
-	grid.generateFullGrid(4, [](typename UGrid<GridData>::Cell& c){
-				return c.data->data.size(); 	
-			});
+	//grid.generateFullGrid(0);
+	//grid.generateFullGrid(3, [](typename UGrid<GridData>::Cell& c){
+	//			return c.data->data.size() > 2 && estimateCurvature(c) > 1.5; 	
+	//		});
 	cur.filterCells(particlesFilter);
 	GraphicsDisplay& gd = GraphicsDisplay::create(800,800,std::string("qCurv"));
 	gd.registerRenderFunc(render);
